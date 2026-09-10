@@ -143,6 +143,5 @@
   status: completed
 
 - id: FINAL
-  slice: FINAL
-  goal: pytest completo verde + validate + demo + self-review (seccion 19) + fixes + <promise>DONE</promise>
-  status: pending
+  goal: FOUNDATION COMPLETA - 108 tests verdes + validate v1.4.1 + demo 14 pasos + reviews implementados; lo pendiente REALDATA3b/DMFPARSER2 es calibracion con muestras reales del usuario, no build
+  status: completed
