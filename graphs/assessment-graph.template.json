@@ -1,0 +1,16 @@
+{
+  "id": "sassessment-full",
+  "kind": "assessment-graph",
+  "status": "not-implemented",
+  "version": "0.1.0-template",
+  "description": "Structure prepared (not fabricated): future full assessment graph will reuse the foundation engine and extend with phase5 scoring, bounded lineage consolidation, phase6 migration roadmap over approved PF target standards, phase7 deliverable generation (Word/PPTX/diagrams), phase8 closure. Implement only with validated domain inputs.",
+  "phases_planned": [
+    {"phase": "phase5", "scope": "complexity scoring + calibration", "status": "not-implemented"},
+    {"phase": "phase6", "scope": "migration recommendations and roadmap from approved PF standards", "status": "not-implemented"},
+    {"phase": "phase7", "scope": "deliverables (Word/PPTX/diagrams), cross-consistency checks", "status": "not-implemented"}
+  ],
+  "nodes": [],
+  "edges": [],
+  "entry": "",
+  "notes": "Load via load_graph only when nodes/edges are implemented; validator reports this template as not-implemented."
+}

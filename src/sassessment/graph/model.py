@@ -45,6 +45,8 @@ class NodeDef:
     agent: str = ""
     phase_gate: bool = False
     requires: List[str] = field(default_factory=list)
+    join: str = "all"
+    optional: bool = False
     max_attempts: int = 5
     condition_registry_names: List[str] = field(default_factory=list)
     composite: Optional[Dict[str, Any]] = None
@@ -153,6 +155,8 @@ def graph_from_json(document: Dict[str, Any]) -> GraphDef:
             agent=str(raw.get("agent", "")),
             phase_gate=bool(raw.get("phase_gate", False)),
             requires=[str(req) for req in raw.get("requires", [])],
+            join=str(raw.get("join", "all")),
+            optional=bool(raw.get("optional", False)),
             max_attempts=int(raw.get("max_attempts", 5)),
             composite=raw.get("composite"),
         )

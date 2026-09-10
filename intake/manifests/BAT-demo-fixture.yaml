@@ -2,7 +2,7 @@ batch_id: BAT-demo-fixture
 provider: ''
 source_team: ''
 environment: ''
-delivery_date: '2026-09-10T15:51:08Z'
+delivery_date: '2026-09-10T19:00:52Z'
 authority_level: SUBSIDIARY
 confidentiality: INTERNAL
 raw_dir: /Users/madraza/Negocios/BNP/SAS/intake/raw/BAT-demo-fixture
@@ -12,37 +12,37 @@ files:
   sha256: f9b76d1b957ed5766abc12b181521f42041678987e964f63ab0f694a90ecc397
   size: 902
   media_type: markdown
-  artifact_id: ART-7db9b0db2f
+  artifact_id: ART-bd59fa5696
   duplicate: false
 - path: dictionary/data_dictionary.csv
   sha256: b51c7a6db8c5f6d843123a7b1d6338dc8fe1e392e491de401958df0728bbc392
   size: 172
   media_type: csv
-  artifact_id: ART-cf8ded0b98
+  artifact_id: ART-4a54a97d97
   duplicate: false
 - path: runtime/scheduler_export.log
   sha256: b12d7865a1c2dfd30ecc8d1cde0b0cc04f5ee2de225fbc9d8831c780483c8a15
   size: 303
   media_type: log-text
-  artifact_id: ART-370ec2bf90
+  artifact_id: ART-5dbfe2b08a
   duplicate: false
 - path: sources/proceso_1.sas
   sha256: 27f0bfa73eb4562454b433d66d807e7cec55a93a09257fd512093f6d43c52470
   size: 742
   media_type: sas-source
-  artifact_id: ART-dc23cc83ce
+  artifact_id: ART-21ae2850eb
   duplicate: false
 - path: sources/proceso_2.sas
   sha256: 4466065a8c72b522604e7c361bcc63d3c51005407beb8848d2c55665517ca981
   size: 486
   media_type: sas-source
-  artifact_id: ART-644ff08d8b
+  artifact_id: ART-6caa000032
   duplicate: false
 - path: sources/shared_macros/fmt_check.sas
   sha256: 5d343227e5fcc4b76c9a734cc0893954a1a05433cbb9f25cf136da3046379303
   size: 261
   media_type: sas-source
-  artifact_id: ART-a5927e09d3
+  artifact_id: ART-a3f6281d77
   duplicate: false
 duplicate_references: []
 known_omissions: ''

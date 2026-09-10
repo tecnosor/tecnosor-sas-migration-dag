@@ -1,7 +1,7 @@
 {
   "id": "sassessment-foundation",
-  "version": "1.3.0",
-  "description": "Foundation assessment graph: intake -> SAS discovery -> runtime correlation -> documentation mapping + offline DBA lineage branch -> quality gate -> audit export.",
+  "version": "1.4.1",
+  "description": "FOUNDATION DEMO GRAPH ONLY: exercises the engine, intake, runtime correlation, human pause/resume, quality gate and audit. Scoring, lineage consolidation, migration recommendations and deliverables are NOT implemented in this graph (future 'assessment-graph' handles them; structure prepared in graphs/assessment-graph.template.json).",
   "entry": "sys.workspace",
   "max_cycles": 40,
   "phases": [
@@ -45,7 +45,8 @@
       "phase": "phase1",
       "title": "Extract XLSX inventories (tables, processes, app ownership)",
       "handler": "inventory.extract",
-      "max_attempts": 3
+      "max_attempts": 3,
+      "optional": true
     },
     {
       "id": "sas.discover",
@@ -79,7 +80,8 @@
       "title": "Interpret legacy scheduler exports semantically (agent node)",
       "agent": "runtime-analyst",
       "handler": "legacy-log-interpret",
-      "max_attempts": 3
+      "max_attempts": 3,
+      "optional": true
     },
     {
       "id": "doc.map_apps",
@@ -118,8 +120,11 @@
       "requires": [
         "sas.discover",
         "runtime.correlate",
-        "doc.map_apps"
-      ]
+        "doc.map_apps",
+        "runtime.dmf_logs",
+        "lineage.dba_request"
+      ],
+      "join": "all"
     },
     {
       "id": "audit.export",
@@ -242,5 +247,6 @@
         }
       }
     }
-  ]
+  ],
+  "kind": "foundation-demo"
 }

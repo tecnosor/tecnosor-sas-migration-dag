@@ -88,29 +88,39 @@ class GraphEngine:
             state.update(extras)
         return state
 
+    _SATISFIED_STATUSES = ("SUCCEEDED", "SKIPPED")
+
     def _prerequisites_met(self, node: NodeDef, state: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        join = getattr(node, "join", "all") or "all"
+        satisfied: List[str] = []
         missing: List[str] = []
         for req in node.requires:
-            if state.get("nodes", {}).get(req, {}).get("status") != "SUCCEEDED":
+            status = state.get("nodes", {}).get(req, {}).get("status")
+            if status in self._SATISFIED_STATUSES:
+                satisfied.append(req)
+            else:
                 missing.append(req)
+        if join == "any":
+            return (len(satisfied) > 0, [] if satisfied else list(node.requires))
         return (len(missing) == 0, missing)
 
     def next_runnable(self, extras: Optional[Dict[str, Any]] = None) -> Optional[NodeDef]:
         state = self.state_snapshot(extras)
+        first_run = not state.get("nodes")
         candidates: List[Tuple[int, int, NodeDef]] = []
         for node in self.graph.nodes.values():
-            if node.id == self.graph.entry and state.get("nodes", {}).get(node.id, {}).get("status") is None:
-                candidates.append((0, 0, node))
-                continue
-            status = state.get("nodes", {}).get(node.id, {}).get("status")
+            status_record = state.get("nodes", {}).get(node.id, {})
+            status = status_record.get("status")
             if status is None:
-                status = "PENDING"
-            if status in ("READY", "PENDING"):
-                met, _missing = self._prerequisites_met(node, state)
-                if met:
-                    rank = 0 if status == "READY" else 1
-                    phase_rank = PHASE_ORDER.index(node.phase) if node.phase in PHASE_ORDER else 99
-                    candidates.append((rank, phase_rank, node))
+                if first_run and node.id == self.graph.entry:
+                    candidates.append((0, 0, node))
+                continue  # PENDING means defined but not yet activated: never auto-runs
+            if status != "READY":
+                continue
+            met, _missing = self._prerequisites_met(node, state)
+            if met:
+                phase_rank = PHASE_ORDER.index(node.phase) if node.phase in PHASE_ORDER else 99
+                candidates.append((0, phase_rank, node))
         if not candidates:
             return None
         candidates.sort(key=lambda item: (item[0], item[1], item[2].id))
@@ -259,10 +269,11 @@ class GraphEngine:
                 f"node {node_id} reached max attempts ({attempts})",
                 details={"node": node_id, "attempts": attempts})
 
-        if status_now == "PENDING" and not self._prerequisites_met(node, state)[0]:
-            raise MissingPrerequisiteError(
-                f"node {node_id} prerequisites missing",
-                details={"missing": self._prerequisites_met(node, state)[1]})
+        if status_now == "PENDING":
+            if node_id != self.graph.entry:
+                raise MissingPrerequisiteError(
+                    f"node {node_id} is PENDING (not activated); await routing or use 'unblock'/",
+                    details={"node": node_id})
 
         attempt = attempts + 1
         self._active_agent_meta = {}
@@ -331,6 +342,7 @@ class GraphEngine:
                                        model=agent_meta.get("model"),
                                        provider=agent_meta.get("provider"),
                                        opencode_session_id=agent_meta.get("opencode_session_id"),
+                                       exit_code=agent_meta.get("exit_code"),
                                        result_path=str(self.execution_dir(node_id, execution_id)))
             self.repo.upsert_node_state(self.assessment_id, node_id, status="SUCCEEDED",
                                         attempts=attempt, last_execution_id=execution_id)
@@ -445,6 +457,7 @@ class GraphEngine:
             "model": invocation.model,
             "provider": invocation.provider,
             "opencode_session_id": invocation.session_id,
+            "exit_code": invocation.exit_code,
         }
         return result
 
@@ -520,6 +533,61 @@ class GraphEngine:
                             rationale="stale RUNNING state after restart/crash")
             recovered.append(node_id)
         return recovered
+
+    def assessment_completion(self, extras: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Deterministic graph completion classification per acceptance review."""
+        state = self.state_snapshot(extras)
+        node_status = {str(node.id): (state.get("nodes", {}).get(node.id) or {}).get("status")
+                       for node in self.graph.nodes.values()}
+        mandatory_ids = {n.id for n in self.graph.nodes.values() if not getattr(n, "optional", False)}
+        open_requests = self.repo.list_requests(self.assessment_id, status="OPEN")
+        blocking = [r for r in open_requests if str(r["priority"]) == "BLOCKING"]
+
+        mandatory_waiting = [
+            nid for nid, value in node_status.items()
+            if nid in mandatory_ids and value in ("WAITING_FOR_INPUT", "WAITING_FOR_APPROVAL")
+        ]
+        optional_waiting = [
+            nid for nid, value in node_status.items()
+            if nid not in mandatory_ids and value in ("WAITING_FOR_INPUT", "WAITING_FOR_APPROVAL")
+        ]
+        if any(value == "RUNNING" for value in node_status.values()):
+            status = "RUNNING"
+        elif blocking:
+            status = "WAITING_FOR_INPUT"
+        elif mandatory_waiting:
+            status = "WAITING_FOR_INPUT"
+        elif any(value == "FAILED" for nid, value in node_status.items() if nid in mandatory_ids):
+            status = "BLOCKED"
+        else:
+            mandatory_done = all(
+                node_status.get(nid) in ("SUCCEEDED", "SKIPPED") for nid in mandatory_ids)
+            if not mandatory_done:
+                runnable = self.next_runnable(extras) is not None
+                status = "RUNNING" if runnable else "BLOCKED"
+            else:
+                status = "COMPLETED_WITH_LIMITATIONS" if (optional_waiting or open_requests) else "COMPLETED"
+        pending_not_activated = [
+            nid for nid, value in node_status.items() if nid in mandatory_ids and value in (None, "PENDING")
+        ]
+        limitations = []
+        if open_requests and not blocking:
+            limitations.append("open non-blocking requests: " + ",".join(
+                str(r["id"]) for r in open_requests if str(r["priority"]) != "BLOCKING"))
+        if optional_waiting:
+            limitations.append("optional branch waiting for material: " + ",".join(sorted(optional_waiting)))
+        if pending_not_activated:
+            limitations.append("mandatory nodes never activated: " + ",".join(sorted(pending_not_activated)))
+        return {
+            "status": status,
+            "open_requests": [str(r["id"]) for r in open_requests],
+            "blocking_count": len(blocking),
+            "waiting_nodes": sorted(nid for nid, value in node_status.items()
+                                    if value in ("WAITING_FOR_INPUT", "WAITING_FOR_APPROVAL")),
+            "pending_nodes": sorted(pending_not_activated),
+            "failed_nodes": sorted(nid for nid, value in node_status.items() if value == "FAILED"),
+            "limitations": limitations,
+        }
 
     def is_final(self) -> bool:
         state = self.state_snapshot()

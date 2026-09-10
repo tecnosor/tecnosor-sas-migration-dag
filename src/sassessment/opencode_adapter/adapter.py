@@ -102,7 +102,10 @@ class OpenCodeAdapter:
         continue_session: bool = False,
     ) -> InvocationResult:
         timeout = float(timeout_seconds or self.config.opencode.timeout_seconds)
-        argv: List[str] = [self.config.opencode.executable, "run", message]
+        effective_message = message
+        if system_prompt:
+            effective_message = system_prompt + "\n\n###TASK###\n" + message
+        argv: List[str] = [self.config.opencode.executable, "run", effective_message]
         if agent_name:
             argv.extend(["--agent", agent_name])
         if model:
@@ -128,11 +131,13 @@ class OpenCodeAdapter:
             return InvocationResult(
                 executable=self.config.opencode.executable, argv=argv, exit_code=None,
                 stdout="", stderr=f"timeout after {timeout}s", duration_ms=int((time.monotonic() - start) * 1000),
-                session_id=None, prompt_hash=_hash(message), model=model, provider=None,
+                session_id=None, prompt_hash=_hash(effective_message), model=model,
+                provider=None,
                 timed_out=True,
             )
         duration_ms = int((time.monotonic() - start) * 1000)
         combined_output = (stdout + "\n" + stderr)
+        _assert_cli_resolution(combined_output)
         _assert_not_quota(combined_output, exit_code)
         provider, _sep, maybe_model = (model.partition("/") if model else (None, "", None))
         parse_model = maybe_model if maybe_model else None
@@ -140,7 +145,7 @@ class OpenCodeAdapter:
         return InvocationResult(
             executable=self.config.opencode.executable, argv=argv, exit_code=exit_code,
             stdout=stdout, stderr=stderr, duration_ms=duration_ms, session_id=session,
-            prompt_hash=_hash(message), model=parse_model, provider=provider,
+            prompt_hash=_hash(effective_message), model=parse_model, provider=provider,
         )
 
 
@@ -158,6 +163,27 @@ QUOTA_PATTERNS = (
 
 def _is_quota_error(text: str) -> bool:
     return any(pattern.search(text) for pattern in QUOTA_PATTERNS)
+
+
+CLI_RESOLUTION_ERRORS = (
+    re.compile(r"(?i)session not found"),
+    re.compile(r"(?i)model not found"),
+    re.compile(r"(?i)invalid api key|unauthorized"),
+)
+
+
+def _assert_cli_resolution(combined_output: str) -> None:
+    from sassessment.errors import AdapterError
+    for pattern in CLI_RESOLUTION_ERRORS:
+        match = pattern.search(combined_output)
+        if match:
+            raise AdapterError(
+                f"opencode CLI resolution failure: {match.group(0)!r}. "
+                "This usually indicates a local plugin/config/environment problem "
+                "rather than adapter misconfiguration; check opencode run in isolation "
+                "or force_mock=true.",
+                details={"hint": "set SASSESSMENT_OPENCODE_FORCE_MOCK=1 or cfg.opencode.force_mock"},
+            )
 
 
 def _assert_not_quota(combined_output: str, exit_code: int) -> None:
@@ -224,13 +250,16 @@ class MockAdapter:
     ) -> InvocationResult:
         start = time.monotonic()
         argv = ["mock-opencode", "run", "--agent", agent_name or "", "--model", model or ""]
-        stdout = mock_envelope_stdout(agent_name, message)
+        effective_message = message
+        if system_prompt:
+            effective_message = system_prompt + "\n\n###TASK###\n" + message
+        stdout = mock_envelope_stdout(agent_name, effective_message)
         sim_session = f"ses_mock{hashlib.md5(message.encode()).hexdigest()[:12]}"
         provider, _sep, model_part = model.partition("/") if model else (None, "", None)
         return InvocationResult(
             executable="mock-opencode", argv=argv, exit_code=0, stdout=stdout,
             stderr="", duration_ms=int((time.monotonic() - start) * 1000),
-            session_id=sim_session, prompt_hash=_hash(message),
+            session_id=sim_session, prompt_hash=_hash(effective_message),
             model=model_part or None, provider=provider,
         )
 

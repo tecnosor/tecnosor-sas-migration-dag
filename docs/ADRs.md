@@ -85,3 +85,39 @@ resume node READY, and equires a result-batch manifest.
   lifecycle needs deterministic, auditable, resumable but small machinery.
 - **Storing raw files in SQLite**: violates size and recoverability aims; raw
   stays on disk immutable with hash manifests.
+
+## ADR-013 strict node eligibility and join semantics
+
+- **Context**: acceptance review found PENDING nodes could execute whenever their
+  prerequisites were satisfied, bypassing routing; converging branches lacked a
+  defined join policy, so a quality gate could complete while a mandatory
+  lineage branch waited for human input.
+- **Decision**:
+  - `PENDING` strictly means "defined but not activated": never auto-runs.
+    `next_runnable()` only returns `READY`. Only two activation paths exist:
+    (a) an edge route after a predecessor SUCCEEDED, (b) the entry node on the
+    very first run / CLI bootstrap; operator `run <node>` on a non-activated
+    node is refused (use `unblock` after a hold, or let routing activate).
+  - every node declares `join` policy: `all` (default) or `any`; `requires`
+    satisfied by `SUCCEEDED` or `SKIPPED` (explicit branch skip is legitimate;
+    WAITING never satisfies).
+  - the foundation demo graph quality gate now REQUIRES the mandatory
+    `lineage.dba_request` branch (join all) — a waiting DBA branch blocks the
+    gate and thus final completion.
+- **Consequences**: explicit routing graph, clamps; deterministic classification
+  of completion via `engine.assessment_completion()` returning
+  COMPLETED / COMPLETED_WITH_LIMITATIONS / WAITING_FOR_INPUT / BLOCKED.
+  SKIPPED counts as an explicit not-applicable branch, not unresolved.
+
+## ADR-014 assessment-graph template scoping
+
+- **Context**: the reviewer required explicitly identifying the implemented
+  graph as a FOUNDATION DEMO and preparing (not fabricating) the structure for
+  the future full assessment graph (scoring, lineage consolidation, migration
+  recommendations, deliverables).
+- **Decision**: `graphs/foundation-graph.json` carries `"kind":
+  "foundation-demo"` with a scope disclaimer; `graphs/assessment-graph.template.json`
+  is `status: not-implemented` and passes only schema checks until real
+  validated domain inputs exist.
+- **Consequences**: validator prints the graph kind and template readiness;
+  downstream consumers cannot mistake the demo for a full assessment workflow.

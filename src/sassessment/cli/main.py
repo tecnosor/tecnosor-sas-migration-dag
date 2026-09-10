@@ -30,21 +30,20 @@ _STATUS_ICON = {
 }
 
 
-def migrations_dir() -> Path:
-    repo = find_repo_root()
-    package_dir = repo / "src" / "sassessment"
+def migrations_dir(repo_root: Path) -> Path:
+    package_dir = repo_root / "src" / "sassessment"
     candidate = package_dir / "state" / "migrations"
     if candidate.is_dir():
         return candidate
-    return repo / "src" / "sassessment" / "state" / "migrations"
+    return repo_root / "src" / "sassessment" / "state" / "migrations"
 
 
-def _load_migrations() -> List[Any]:
+def _load_migrations(repo_root: Path) -> List[Any]:
     return [
         (int(p.name.split("__")[0][1:]),
          p.name.split("__", 1)[1].replace(".sql", ""),
          p.read_text(encoding="utf-8"))
-        for p in sorted(migrations_dir().glob("V*.sql"))
+        for p in sorted(migrations_dir(repo_root).glob("V*.sql"))
     ]
 
 
@@ -53,7 +52,7 @@ class ApplicationContext:
         self.config: SassessmentConfig = load_config(repo_root=repo_root or find_repo_root())
         self.layout: WorkspaceLayout = ensure_workspace(self.config.repo_root)
         self.db = Database(self.config.database_path)
-        self.migrator = Migrator(self.db, _load_migrations())
+        self.migrator = Migrator(self.db, _load_migrations(self.config.repo_root))
         self.repo = Repository(self.db)
         self.audit = AuditEmitter(self.db, self.layout.audit_log_path(),
                                   Redactor(self.config.redaction_patterns))
@@ -142,6 +141,9 @@ def cmd_status(context: ApplicationContext) -> int:
         print("blockers:")
         for blocker in blockers:
             print(f"  - {blocker['node']}: {blocker['reason']}")
+    completion = engine.assessment_completion()
+    print(f"completion status: {completion['status']}"
+          + (f" (blocking: {completion['blocking_count']})" if completion["blocking_count"] else ""))
     open_requests = context.repo.list_requests(aid, status="OPEN")
     if open_requests:
         print("open requests:")
@@ -171,8 +173,11 @@ def cmd_run(context: ApplicationContext, node_id: Optional[str] = None,
         print("open blockers:")
         for blocker in blockers:
             print(f"  - {blocker.get('node')}: {blocker.get('reason')}")
-    return 0 if all(o.status in ("SUCCEEDED", "PLANNED", "WAITING_FOR_INPUT",
-                                 "WAITING_FOR_APPROVAL", "SKIPPED") for o in outcomes) else 1
+    completion = engine.assessment_completion()
+    print(f"assessment completion: {completion['status']}")
+    ok_statuses = ("SUCCEEDED", "PLANNED", "WAITING_FOR_INPUT",
+                   "WAITING_FOR_APPROVAL", "SKIPPED")
+    return 0 if all(o.status in ok_statuses for o in outcomes) else 1
 
 
 def cmd_logs(context: ApplicationContext) -> int:
@@ -392,7 +397,19 @@ def cmd_validate(context: ApplicationContext) -> int:
         except SASsessmentError as exc:
             problems.append(f"graph invalid: {exc.message}")
         else:
+            kind = getattr(graph, "kind", None) or "foundation-demo"
+            template_path = context.config.repo_root / "graphs" / "assessment-graph.template.json"
+            template_plan = ""
+            if template_path.is_file():
+                try:
+                    import json as _json
+                    template_doc = _json.loads(template_path.read_text(encoding="utf-8"))
+                    template_plan = str(template_doc.get("status"))
+                except Exception:
+                    pass
             print(f"ok: graph {len(graph.nodes)} nodes / {len(graph.edges)} edges (v{graph.version})")
+            print(f"ok: graph kind {kind}"
+                  + (f"; assessment-graph.template status={template_plan}" if template_plan else ""))
     if problems:
         print("validation problems:")
         for problem in problems:

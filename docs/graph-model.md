@@ -141,3 +141,42 @@ The graph has two independent branches after `sas.discover`: the main branch
 (runtime.correlate, doc.map_apps, quality.gate, audit.export) and the offline
 DBA lineage branch (lineage.dba_request, lineage.ingest_dba). The DBA branch
 pauses for human input while the main branch continues.
+
+
+## Eligibility and join semantics (DEFINITIVE, ADR-013)
+
+- `PENDING` = defined but never activated: it NEVER auto-runs.
+- Only `READY` nodes are eligible for execution; activation happens via
+  (a) edge routing from a SUCCEEDED predecessor or (b) the entry node on
+  first run / CLI bootstrap.
+- Every node declares a `join` policy: `all` (default) or `any`.
+  `requires` is satisfied by `SUCCEEDED` or `SKIPPED` only — never by
+  `WAITING_FOR_INPUT`/`FAILED`.
+- `quality.gate` in the foundation demo graph declares
+  `join: all` including `lineage.dba_request`: a waiting DBA branch blocks
+  the gate, so the assessment cannot COMPLETE until the operator answers the
+  request (or the branch explicitly SKIPS when no DB objects exist).
+
+## Completion classification (deterministic)
+
+`engine.assessment_completion()` returns exactly one of:
+
+| Status | Rule |
+|---|---|
+| RUNNING | any node RUNNING or runnable work exists |
+| WAITING_FOR_INPUT | open human request or a mandatory node WAITING |
+| BLOCKED | a mandatory node FAILED (or nothing runnable and not done) |
+| COMPLETED | all mandatory nodes SUCCEEDED/SKIPPED, no open blocking requests |
+| COMPLETED_WITH_LIMITATIONS | like COMPLETED, plus limitations (optional branches waiting, unresolved gaps) |
+
+Optional nodes (`optional: true`, e.g. `inventory.extract`,
+`runtime.legacy_interpret`) can WAIT without blocking completion; their state
+is reported as limitations. Blocking requests ALWAYS block COMPLETED.
+
+## Graph identity
+
+`graphs/foundation-graph.json` is labeled `"kind": "foundation-demo"`: it
+validates engine/intake/human pause/resume/checkpoint/gate/audit semantics.
+The full assessment workflow (scoring, lineage consolidation, migration
+recommendations, deliverables) is STRUCTURED but NOT IMPLEMENTED in
+`graphs/assessment-graph.template.json` (`status: not-implemented`).

@@ -106,6 +106,11 @@ def simple_graph(entry="n1"):
                     nodes={n.id: n for n in nodes}, edges=edges, phases=["phase1", "phase2", "final"])
 
 
+def mark_ready(engine, ids):
+    for node_id in ids:
+        engine.repo.upsert_node_state(engine.assessment_id, node_id, status="READY")
+
+
 def full_handlers():
     return {"ok": ok_handler, "waiter": wait_handler, "fail": fail_handler, "loop": loop_handler}
 
@@ -185,6 +190,7 @@ class TestEngine:
     def test_happy_chain_runs_and_marks_succeeded(self, tmp_path):
         graph = simple_graph()
         engine = build_engine(tmp_path, graph, full_handlers())
+        mark_ready(engine, ["n1", "branch", "wait"])
         outcomes = engine.run()
         statuses = {o.node_id: o.status for o in outcomes}
         assert statuses["n1"] == "SUCCEEDED"
@@ -210,15 +216,18 @@ class TestEngine:
     def test_failed_node_does_not_corrupt_checkpoint(self, tmp_path):
         graph = simple_graph()
         engine = build_engine(tmp_path, graph, full_handlers())
+        engine.repo.upsert_node_state(engine.assessment_id, "branch", status="READY")
         engine.run_node("branch")
         from sassessment.state.checkpoints import CheckpointManager
         from sassessment.state.repository import Repository
         ckp_manager = CheckpointManager(engine.db, engine.repo_obj, engine.layout)
         ckp = ckp_manager.create(engine.assessment_id, "pre-failure")
+        engine.repo.upsert_node_state(engine.assessment_id, "n1", status="READY")
         engine.run_node("n1")
         bad_n = NodeDef(id="failing", type="deterministic", phase="phase1", handler="fail", requires=[])
         engine.graph.nodes["failing"] = bad_n
         engine.graph.edges.append(EdgeDef(source="failing", target="final"))
+        engine.repo.upsert_node_state(engine.assessment_id, "failing", status="READY")
         outcome = engine.run_node("failing")
         assert outcome.status == "FAILED"
         state = engine.state_snapshot()
@@ -229,16 +238,18 @@ class TestEngine:
         graph = simple_graph()
         engine = build_engine(tmp_path, graph, full_handlers())
         engine.repo.upsert_node_state(engine.assessment_id, "wait", status="WAITING_FOR_INPUT", attempts=1)
+        engine.repo.upsert_node_state(engine.assessment_id, "branch", status="READY")
         engine.run_node("branch")
         engine.repo.upsert_node_state(engine.assessment_id, "wait", status="SUCCEEDED", attempts=2)
+        engine.repo.upsert_node_state(engine.assessment_id, "n2", status="READY")
         nxt = engine.next_runnable()
         assert nxt is not None
-        assert nxt.id in ("n1", "n2")
-        assert nxt.id == "n2" or nxt.id == "n1"
+        assert nxt.id == "n2"
 
     def test_branch_waits_independently(self, tmp_path):
         graph = simple_graph()
         engine = build_engine(tmp_path, graph, full_handlers())
+        mark_ready(engine, ["n1", "branch", "wait"])
         engine.run()
         state = engine.state_snapshot()
         assert state["nodes"]["wait"]["status"] == "WAITING_FOR_INPUT"
@@ -340,3 +351,68 @@ class TestEnvelope:
         from sassessment.opencode_adapter.envelope import build_result_from_envelope
         with pytest.raises(ResultValidationError):
             build_result_from_envelope(invocation, fake_context)
+
+
+class TestJoinSemantics:
+    def _build(self, tmp_path, join_policy):
+        from test_graph import mark_ready as mark_ready_helper
+        from test_graph import build_engine, full_handlers
+        from sassessment.graph.model import GraphDef, NodeDef, EdgeDef
+        nodes = [
+            NodeDef(id="a", type="deterministic", phase="phase1", handler="ok"),
+            NodeDef(id="b", type="deterministic", phase="phase1", handler="waiter"),
+            NodeDef(id="gate", type="validation", phase="final", handler="ok",
+                    requires=["a", "b"], join=join_policy),
+        ]
+        edges = [EdgeDef(source="a", target="gate"), EdgeDef(source="b", target="gate")]
+        graph = GraphDef(graph_id="g-join", version="1", entry="a",
+                         nodes={n.id: n for n in nodes}, edges=edges)
+        return build_engine(tmp_path, graph, full_handlers())
+
+    def test_join_all_waits_for_mandatory_lineage_branch(self, tmp_path):
+        engine = self._build(tmp_path.joinpath("all"), "all")
+        mark_ready(engine, ["a", "b"])
+        engine.repo.upsert_node_state(engine.assessment_id, "a", status="READY")
+        engine.repo.upsert_node_state(engine.assessment_id, "b", status="READY")
+        engine.run()
+        state = engine.state_snapshot()
+        assert state["nodes"]["a"]["status"] == "SUCCEEDED"
+        assert state["nodes"]["b"]["status"] == "WAITING_FOR_INPUT"
+        assert state["nodes"]["gate"].get("status", "PENDING") != "SUCCEEDED"
+
+    def test_join_any_fires_when_one_returns(self, tmp_path):
+        engine = self._build(tmp_path.joinpath("any"), "any")
+        engine.repo.upsert_node_state(engine.assessment_id, "a", status="SUCCEEDED", attempts=1)
+        engine.repo.upsert_node_state(engine.assessment_id, "gate", status="READY")
+        for _ in range(1):
+            outcome = engine.run_node("gate")
+        assert outcome.status == "SUCCEEDED"
+
+
+class TestCompletionClassification:
+    def _engine_with_state(self, tmp_path):
+        graph = simple_graph()
+        engine = build_engine(tmp_path, graph, full_handlers())
+        mark_ready(engine, ["n1", "branch", "wait"])
+        engine.run()
+        return engine
+
+    def test_waiting_for_input_when_open_blocking_request(self, tmp_path):
+        engine = self._engine_with_state(tmp_path)
+        completion = engine.assessment_completion()
+        assert completion["status"] == "WAITING_FOR_INPUT"
+
+    def test_blocked_when_mandatory_failed(self, tmp_path):
+        graph = simple_graph()
+        engine = build_engine(tmp_path, graph, full_handlers())
+        engine.repo.upsert_node_state(engine.assessment_id, "n1", status="FAILED", attempts=5)
+        engine.repo.upsert_node_state(engine.assessment_id, "branch", status="SUCCEEDED", attempts=1)
+        engine.repo.upsert_node_state(engine.assessment_id, "wait", status="SUCCEEDED", attempts=2)
+        completion = engine.assessment_completion()
+        assert completion["status"] == "BLOCKED"
+
+    def test_pending_never_activated_not_reported_completed(self, tmp_path):
+        graph = simple_graph()
+        engine = build_engine(tmp_path, graph, full_handlers())
+        completion = engine.assessment_completion()
+        assert completion["status"] != "COMPLETED"
