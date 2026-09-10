@@ -106,6 +106,15 @@
   goal: backlog slices A-H documentado + decision/assumption/risk registers + handoff + bootstrap report
   status: pending
 
+- id: REALDATA
+  slice: REAL
+  goal: preparacion para prueba real - XLSX multi-sheet extractor (stdlib zip+xml), nodo inventory.extract v1.1.0 (alimenta doc.map_apps sin bloquear sas.discover), comando inspect para preview de batches, legacy .xls genera gap de conversion; 83 tests verdes; pushed a origin/main d3175e7
+  status: completed
+- id: REALDATA2
+  slice: REAL
+  goal: pendiente feedback usuario - parser de logs legacy sin formato (se probara con muestra real), lectura BLP legacy .xls, posiblenodo agente OpenCode para logs semantica
+  status: pending
+
 - id: FINAL
   slice: FINAL
   goal: pytest completo verde + validate + demo + self-review (seccion 19) + fixes + <promise>DONE</promise>
