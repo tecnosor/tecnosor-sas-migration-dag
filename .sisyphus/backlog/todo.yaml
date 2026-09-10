@@ -110,9 +110,18 @@
   slice: REAL
   goal: preparacion para prueba real - XLSX multi-sheet extractor (stdlib zip+xml), nodo inventory.extract v1.1.0 (alimenta doc.map_apps sin bloquear sas.discover), comando inspect para preview de batches, legacy .xls genera gap de conversion; 83 tests verdes; pushed a origin/main d3175e7
   status: completed
-- id: REALDATA2
+- id: REALDATA2a
   slice: REAL
-  goal: pendiente feedback usuario - parser de logs legacy sin formato (se probara con muestra real), lectura BLP legacy .xls, posiblenodo agente OpenCode para logs semantica
+  goal: parser heuristico de logs legacy (4 patrones de timestamp, filtro de IDs syslog, deteccion start/end) - lista para afinar con muestra real
+  files: [src/sassessment/demo/nodes.py::parse_legacy_log_event]
+  status: completed
+- id: REALDATA2b
+  slice: REAL
+  goal: nodo agente OpenCode runtime.legacy_interpret (graph v1.2.1) + prompt template prompts/legacy-log-interpret.md + mock default / real opt-in (opencode.force_mock=true default)
+  status: completed
+- id: REALDATA3
+  slice: REAL
+  goal: pending user feedback: .xls binario conversion (hoy gap), ajustar heuristics con logs reales cuando lleguen, validar afluencia inventarios xlsx con formato real
   status: pending
 
 - id: FINAL
