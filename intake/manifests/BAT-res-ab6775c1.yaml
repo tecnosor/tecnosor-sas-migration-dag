@@ -1,30 +1,30 @@
-batch_id: BAT-res-af6b2d7b
+batch_id: BAT-res-ab6775c1
 provider: ''
 source_team: ''
 environment: ''
-delivery_date: '2026-09-10T14:27:58Z'
+delivery_date: '2026-09-10T14:38:07Z'
 authority_level: SUBSIDIARY
 confidentiality: INTERNAL
-raw_dir: /Users/madraza/Negocios/BNP/SAS/intake/raw/req-req-20260910-af6b2d7b
-integrity_hash: e905d428be7fa964970836ffeaf4d5f88272a51fc6e3e73705a11005f25de914
+raw_dir: /Users/madraza/Negocios/BNP/SAS/intake/raw/req-req-20260910-ab6775c1
+integrity_hash: c58fb47dfd487ae5eb9e21ac4679df69568cefc9517cb0dc50a8578e6772791a
 files:
 - path: REQUEST.md
-  sha256: 0b91f1523b34c18e1898bc874e12ee594f1f0b28a8d2f4440a7f6e960c0aae92
+  sha256: fbb09f1ca0365678628ea919cddd3cde5c3ee1e4dc3bcb108eaa2f5183e466cc
   size: 803
   media_type: markdown
-  artifact_id: ART-04487c4d57
+  artifact_id: ART-c7199ab660
   duplicate: false
 - path: all_dependencies_export.csv
   sha256: bb0eb80d4c2aea41681d5390e998dc08c106330ad0e10f4fd013f09183aa3726
   size: 234
   media_type: csv
-  artifact_id: ART-5cd5929842
+  artifact_id: ART-15d7c4479b
   duplicate: false
 - path: query-pack.sql
   sha256: 54ac1b8899b275f30a3accf194ce3bc1c954542f1fb8bbe1eaf605c38d491e36
   size: 179
   media_type: sql-plsql
-  artifact_id: ART-08fa253ec5
+  artifact_id: ART-85c212f626
   duplicate: false
 duplicate_references: []
 known_omissions: ''
