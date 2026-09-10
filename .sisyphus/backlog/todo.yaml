@@ -137,6 +137,11 @@
   goal: pendiente calibracion con log real 14MB del usuario - streaming 14MB test, encodings legacy, corpus golden ampliado (35 casos del espec), metrica de cobertura sobre el log real
   status: pending
 
+- id: REVIEWFIX
+  slice: ACCEPT
+  goal: fix del review del agente auditor - las 6 correcciones implementadas con tests (eligencia estricta, join all/any, completion classifier, adapter-engine integration, demo-graph identity, docs reconciliation); 108 tests; push 08bc93d
+  status: completed
+
 - id: FINAL
   slice: FINAL
   goal: pytest completo verde + validate + demo + self-review (seccion 19) + fixes + <promise>DONE</promise>
