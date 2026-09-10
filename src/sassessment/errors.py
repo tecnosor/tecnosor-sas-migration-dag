@@ -95,6 +95,10 @@ class AdapterTimeoutError(AdapterError):
     code = "ADAPTER_TIMEOUT"
 
 
+class AdapterQuotaLimitError(AdapterError):
+    code = "ADAPTER_QUOTA_LIMIT"
+
+
 class ResultValidationError(AdapterError):
     code = "RESULT_VALIDATION_ERROR"
 

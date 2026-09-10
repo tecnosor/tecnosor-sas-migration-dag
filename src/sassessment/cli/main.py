@@ -102,8 +102,12 @@ class ApplicationContext:
         bootstrap = self.repo.get_node_state(aid, self.graph.entry)
         if bootstrap is None:
             self.repo.upsert_node_state(aid, self.graph.entry, status="READY")
-        return GraphEngine(self.config, self.graph, self.registry, self.predicates,
-                           self.repo, self.audit, self.layout, aid, sid)
+        engine = GraphEngine(self.config, self.graph, self.registry, self.predicates,
+                             self.repo, self.audit, self.layout, aid, sid)
+        recovered = engine.recover_stale_running()
+        if recovered:
+            print(f"auto-recovery: released stale RUNNING nodes after crash/restart: {recovered}")
+        return engine
 
     def close(self) -> None:
         self.db.close()
@@ -307,6 +311,26 @@ def answer_request(context: ApplicationContext, request_id: str) -> int:
     return 0
 
 
+def cmd_unblock(context: ApplicationContext, node_id: str) -> int:
+    """Release a WAITING_FOR_APPROVAL (quota) or stuck node without consuming one attempt."""
+    aid = context.active_assessment_id()
+    state = context.repo.get_node_state(aid, node_id)
+    if state is None:
+        print(f"unknown node in this assessment: {node_id}")
+        return 1
+    if str(state["status"]) not in ("WAITING_FOR_APPROVAL", "FAILED", "RUNNING", "READY"):
+        print(f"node {node_id} state is {state['status']}; only holds and failures can be unblocked")
+        return 1
+    context.repo.upsert_node_state(aid, node_id, status="READY",
+                                   attempts=int(state["attempts"]))
+    context.audit.emit(action="node.unblocked", actor_type="human",
+                       assessment_id=aid, node_id=node_id,
+                       previous_state=str(state["status"]), new_state="READY",
+                       rationale="operator released a quota hold or failure")
+    print(f"node {node_id} unblocked ({state['status']} -> READY); run `start` to resume")
+    return 0
+
+
 def cmd_checkpoint(context: ApplicationContext) -> int:
     aid = context.active_assessment_id()
     manager = CheckpointManager(context.db, context.repo, context.layout, audit=context.audit)
@@ -434,6 +458,8 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("path")
     answer = subparsers.add_parser("answer")
     answer.add_argument("request_id")
+    unblock = subparsers.add_parser("unblock")
+    unblock.add_argument("node_id")
     checkpoint_parser = subparsers.add_parser("checkpoint")
     subparsers.add_parser("sessions")
     subparsers.add_parser("history")
@@ -474,6 +500,8 @@ def dispatch(args: argparse.Namespace) -> int:
             return cmd_add_input(context, args.path)
         if args.command == "answer":
             return cmd_answer(context, args.request_id)
+        if args.command == "unblock":
+            return cmd_unblock(context, args.node_id)
         if args.command == "checkpoint":
             return cmd_checkpoint(context)
         if args.command == "sessions":

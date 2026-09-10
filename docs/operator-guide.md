@@ -239,3 +239,13 @@ sassessment show requests
 #   destination batch: intake/raw/req-20260910-abcdef12
 #   resume node: lineage.ingest_dba
 ```
+
+## Multi-day operation and crash recovery
+
+| Scenario | Actions |
+|---|---|
+| Provider quota dies mid-node | Engine pauses the node as `WAITING_FOR_APPROVAL` WITHOUT consuming attempt budget (test hook: `node.quota_hold` audit event). Other branches keep running. |
+| Quota resets next day | `sassessment unblock <node-id>` sets it READY (no attempt burn), then `sassessment start` resumes only pending work. |
+| VM relaunch / process killed mid-node | On startup `ApplicationContext.engine()` calls `engine.recover_stale_running()` which releases stale RUNNING nodes to READY (attempts preserved) and marks their half-open executions CANCELLED. |
+| Same quota problems on an offline portion | Deterministic nodes never call OpenCode, so they are immune. |
+| Idempotency used before | `intake.register` skips already-registered batches, the human request unique-index prevents repeated DBA/ops asks. |

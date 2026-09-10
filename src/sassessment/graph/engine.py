@@ -258,6 +258,7 @@ class GraphEngine:
                 details={"missing": self._prerequisites_met(node, state)[1]})
 
         attempt = attempts + 1
+        self._active_agent_meta = {}
         execution_id = self._new_execution_id()
         started = time.monotonic()
         self.repo.create_execution(execution_id, self.session_id, self.assessment_id,
@@ -271,6 +272,27 @@ class GraphEngine:
         try:
             result = self._execute(node, execution_id, attempt)
         except Exception as exc:
+            from sassessment.errors import AdapterQuotaLimitError
+            if isinstance(exc, AdapterQuotaLimitError):
+                duration_ms = int((time.monotonic() - started) * 1000)
+                self.repo.finish_execution(execution_id, status="WAITING_FOR_APPROVAL",
+                                           duration_ms=duration_ms, error=str(exc))
+                self.repo.upsert_node_state(self.assessment_id, node_id,
+                                            status="WAITING_FOR_APPROVAL",
+                                            attempts=attempts,
+                                            last_execution_id=execution_id,
+                                            last_error=f"quota hold: {str(exc)[:120]}")
+                self.audit.emit(action="node.quota_hold", actor_type="engine",
+                                assessment_id=self.assessment_id,
+                                session_id=self.session_id, execution_id=execution_id,
+                                node_id=node_id, previous_state="RUNNING",
+                                new_state="WAITING_FOR_APPROVAL", error=str(exc),
+                                details={"attempts_preserved": attempts,
+                                         "resume_command": f"sassessment unblock {node_id}"})
+                return RunOutcome(node_id=node_id, execution_id=execution_id,
+                                  status="WAITING_FOR_APPROVAL",
+                                  summary="provider quota/rate limit reached; attempts preserved. "
+                                          f"Run 'sassessment unblock {node_id}' once quota resets.")
             duration_ms = int((time.monotonic() - started) * 1000)
             self.repo.finish_execution(execution_id, status="FAILED", duration_ms=duration_ms,
                                        error=str(exc))
@@ -296,7 +318,12 @@ class GraphEngine:
                               summary="result envelope rejected: " + "; ".join(violations))
 
         if result.status == "success":
+            agent_meta = dict(getattr(self, "_active_agent_meta", {}) or {})
             self.repo.finish_execution(execution_id, status="SUCCEEDED", duration_ms=duration_ms,
+                                       prompt_hash=agent_meta.get("prompt_hash"),
+                                       model=agent_meta.get("model"),
+                                       provider=agent_meta.get("provider"),
+                                       opencode_session_id=agent_meta.get("opencode_session_id"),
                                        result_path=str(self.execution_dir(node_id, execution_id)))
             self.repo.upsert_node_state(self.assessment_id, node_id, status="SUCCEEDED",
                                         attempts=attempt, last_execution_id=execution_id)
@@ -350,25 +377,50 @@ class GraphEngine:
     # -- agent nodes ----------------------------------------------------------------
 
     def _execute_opencode(self, node: NodeDef, context: NodeContext) -> NodeResult:
-        from sassessment.opencode_adapter.adapter import OpenCodeAdapter, AdapterMode
+        from sassessment.opencode_adapter.adapter import OpenCodeAdapter
         from sassessment.opencode_adapter.envelope import build_result_from_envelope
         from sassessment.prompts import render_prompt
 
         prompt = render_prompt(node, context)
         adapter = OpenCodeAdapter(self.config)
-        invocation = adapter.run(
-            message=prompt["message"],
-            system_prompt=prompt.get("system"),
-            agent_name=node.agent or self.config.opencode.agents.get("coordinator", ""),
-            model=self.config.opencode.default_model,
-            timeout_seconds=self.config.opencode.timeout_seconds,
-            cwd=str(self.config.repo_root),
-        )
-        context.execution_dir.mkdir(parents=True, exist_ok=True)
-        (context.execution_dir / "stdout.log").write_text(invocation.stdout, encoding="utf-8")
-        (context.execution_dir / "stderr.log").write_text(invocation.stderr, encoding="utf-8")
-        (context.execution_dir / "invocation.json").write_text(json.dumps(invocation.to_dict()), encoding="utf-8")
-        context.prompt_hash = invocation.prompt_hash
+        invocation = None
+        last_invocation = None
+        retry_budget = max(self.config.limits.max_retries, 1)
+        for attempt_index in range(retry_budget):
+            try:
+                invocation = adapter.run(
+                    message=prompt["message"],
+                    system_prompt=prompt.get("system"),
+                    agent_name=node.agent or self.config.opencode.agents.get("coordinator", ""),
+                    model=self.config.opencode.default_model,
+                    timeout_seconds=self.config.opencode.timeout_seconds,
+                    cwd=str(self.config.repo_root),
+                )
+                context.execution_dir.mkdir(parents=True, exist_ok=True)
+                (context.execution_dir / "stdout.log").write_text(invocation.stdout, encoding="utf-8")
+                (context.execution_dir / "stderr.log").write_text(invocation.stderr, encoding="utf-8")
+                (context.execution_dir / "invocation.json").write_text(
+                    json.dumps(invocation.to_dict()), encoding="utf-8")
+                context.prompt_hash = invocation.prompt_hash
+                last_invocation = invocation
+                if invocation.timed_out and attempt_index < retry_budget - 1:
+                    time.sleep(min(2.0, 0.5 * (attempt_index + 1)))
+                    continue
+                break
+            except Exception as invocation_error:
+                from sassessment.errors import AdapterQuotaLimitError
+                if isinstance(invocation_error, AdapterQuotaLimitError):
+                    raise
+                if attempt_index < retry_budget - 1:
+                    time.sleep(min(2.0, 0.5 * (attempt_index + 1)))
+                    continue
+                raise
+
+        if last_invocation is None:
+            from sassessment.errors import AdapterError
+            raise AdapterError(f"opencode invocation produced no result for node {node.id}")
+        invocation = last_invocation
+
         try:
             result = build_result_from_envelope(invocation, context)
         except Exception as exc:
@@ -379,8 +431,14 @@ class GraphEngine:
                                        opencode_session_id=invocation.session_id)
             raise NodeExecutionError(
                 f"agent output rejected for {node.id}: {exc}") from exc
-        if invocation.opencode_session_id:
-            context.log(f"opencode session {invocation.opencode_session_id}")
+        if invocation.session_id:
+            context.log(f"opencode session {invocation.session_id}")
+        self._active_agent_meta = {
+            "prompt_hash": invocation.prompt_hash,
+            "model": invocation.model,
+            "provider": invocation.provider,
+            "opencode_session_id": invocation.session_id,
+        }
         return result
 
     # -- routing ------------------------------------------------------------------------
@@ -426,6 +484,35 @@ class GraphEngine:
             self.audit.emit(action="phase.advanced", actor_type="engine",
                             assessment_id=self.assessment_id, node_id=node.id,
                             previous_state=node.phase, new_state=PHASE_ORDER[index + 1])
+
+    def recover_stale_running(self) -> List[str]:
+        """Normalize nodes left RUNNING after a crash/VM restart.
+
+        Called on engine startup: RUNNING nodes get their state reset to READY
+        (attempt not consumed) and their executions are marked CANCELLED so the
+        operator is not punished for a VM relaunch.
+        """
+        rows = self.repo.list_node_states(self.assessment_id)
+        recovered: List[str] = []
+        for row in rows:
+            if str(row["status"]) != "RUNNING":
+                continue
+            node_id = str(row["node_id"])
+            self.repo.upsert_node_state(self.assessment_id, node_id, status="READY",
+                                        attempts=int(row["attempts"]),
+                                        cycles=int(row["cycles"]),
+                                        last_execution_id=None,
+                                        last_error=None)
+            execution_row = self.repo.get_execution(str(row["last_execution_id"]))
+            if execution_row is not None and str(execution_row["status"]) == "RUNNING":
+                self.repo.finish_execution(str(row["last_execution_id"]),
+                                           status="CANCELLED", duration_ms=None)
+            self.audit.emit(action="node.recovered", actor_type="engine",
+                            assessment_id=self.assessment_id, node_id=node_id,
+                            previous_state="RUNNING", new_state="READY",
+                            rationale="stale RUNNING state after restart/crash")
+            recovered.append(node_id)
+        return recovered
 
     def is_final(self) -> bool:
         state = self.state_snapshot()

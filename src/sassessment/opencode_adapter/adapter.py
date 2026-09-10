@@ -132,6 +132,8 @@ class OpenCodeAdapter:
                 timed_out=True,
             )
         duration_ms = int((time.monotonic() - start) * 1000)
+        combined_output = (stdout + "\n" + stderr)
+        _assert_not_quota(combined_output, exit_code)
         provider, _sep, maybe_model = (model.partition("/") if model else (None, "", None))
         parse_model = maybe_model if maybe_model else None
         session = _extract_session(stdout)
@@ -140,6 +142,30 @@ class OpenCodeAdapter:
             stdout=stdout, stderr=stderr, duration_ms=duration_ms, session_id=session,
             prompt_hash=_hash(message), model=parse_model, provider=provider,
         )
+
+
+QUOTA_PATTERNS = (
+    re.compile(r"(?i)\b(429|402|403)\b.*(quota|limit|credit|payment|exceeded|unauthorized)"),
+    re.compile(r"(?i)quota\s*(exceeded|limit|exhausted)"),
+    re.compile(r"(?i)insufficient\s+(credits?|funds?|balance)"),
+    re.compile(r"(?i)(daily|monthly|usage)\s+limit\s+(reached|exceeded)"),
+    re.compile(r"(?i)rate\s+limit.*(retry|exceeded|too many)"),
+    re.compile(r"(?i)you'?ve\s+(hit|used)\s+(your|the)\s+(limit|quota)"),
+    re.compile(r"(?i)credit balance is too low"),
+    re.compile(r"(?i)exceeded your current quota"),
+)
+
+
+def _is_quota_error(text: str) -> bool:
+    return any(pattern.search(text) for pattern in QUOTA_PATTERNS)
+
+
+def _assert_not_quota(combined_output: str, exit_code: int) -> None:
+    from sassessment.errors import AdapterQuotaLimitError
+    if _is_quota_error(combined_output):
+        raise AdapterQuotaLimitError(
+            "provider quota/rate limit detected; invocation refused without consuming the node attempt",
+            details={"exit_code": exit_code})
 
 
 def _extract_session(stdout: str) -> Optional[str]:
