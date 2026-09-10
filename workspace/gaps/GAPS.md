@@ -181,3 +181,13 @@ Open gaps in the current implementation. Each gap has an owner hint and a next a
 **Next Action.** Create a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs on push and pull requests. Steps: checkout, setup Python 3.9, install dependencies (pip install -e .[dev]), run pytest, run sassessment validate, run sassessment demo (clean state). Add optional steps: lint (ruff or flake8), type check (mypy), security audit (pip-audit).
 
 **Dependencies.** GitHub repository setup (if not already done). Decision on required vs. optional checks.
+
+## GAP-ALL-007: content-based reactivation of completed branches
+- **Status**: OPEN (post-foundation)
+- **Current behavior**: branching reactivation happens via `sassessment answer`
+  (request resolution flips the resume node to READY). Content-based selective
+  invalidation (e.g., a NEW batch lands and auto-invalidates only affected
+  downstream results) is not implemented yet; duplicated requests are prevented
+  and already-completed work is not re-run in the happy path.
+- **Next action**: implement a new-batch hook comparing manifest changes to
+  evidence references and flipping affected nodes to READY (owner: orchestrator).

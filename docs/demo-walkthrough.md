@@ -35,7 +35,7 @@ PYTHONPATH=src python3 -m sassessment review
 
 ## Expected highlights
 
-- `intake.register: SUCCEEDED` with fixture batch (7 files incl. README).
+- `intake.register: SUCCEEDED` with fixture batch (6 files incl. README).
 - `quality.gate` initially FAILS only if a finding/edge lacks evidence (the demo
   phase 1 run may pass) — after the DBA resume the gate re-run passes.
 - The DBA destination is `intake/raw/req-<request-id>/` — printed on creation.
