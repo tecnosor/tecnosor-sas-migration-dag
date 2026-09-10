@@ -17,11 +17,13 @@ class OpenCodeSettings:
     agents: Dict[str, str] = field(default_factory=dict)
     timeout_seconds: int = 600
     max_output_bytes: int = 1048576
+    force_mock: bool = True
 
 
 @dataclass
 class Limits:
     max_retries: int = 2
+    agent_retry_backoff_seconds: float = 2.0
     max_graph_cycles: int = 25
     max_node_attempts: int = 5
     lineage_max_depth: int = 2

@@ -61,6 +61,51 @@ def node_sys_workspace(context: NodeContext) -> NodeResult:
                       evidence_used=[evidence], confidence="CONFIRMED")
 
 
+
+POWER_WORDS = ("complete", "finished", "end", "success", "done", "running",
+               "start", "error", "job", "process", "hour", "minute", "second",
+               "duration", "elapsed", "status", "date", "timestamp")
+
+LEGACY_TS_PATTERNS = (
+    r"(\d{4}-\d{2}-\d{2})([ T])?(\d{2}:\d{2}(:\d{2})?)?\b",
+    r"\b(\d{2}/\d{2}/\d{4})([ ]?\d{1,2}:\d{2}(:\d{2})?)?\b",
+    r"\b(\d{2}-\d{2}-\d{2})[ ]?(\d{1,2}:\d{2}(:\d{2})?)?\b",
+    r"\b(\d{1,2}:\d{2}:\d{2}(\.\d+)?)\b",
+)
+
+
+def parse_legacy_log_event(line: str) -> Optional[Dict[str, Any]]:
+    """Heuristic event extraction for legacy/free-form scheduler log lines."""
+    if not line or len(line) < 12 or line.startswith("#"):
+        return None
+    matched_ts: Optional[str] = None
+    for ts_pattern in LEGACY_TS_PATTERNS:
+        ts_match = re.search(ts_pattern, line)
+        if ts_match:
+            matched_ts = ts_match.group(0)
+            break
+    if not matched_ts:
+        return None
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_\-]{3,}", line)
+    candidates = [word for word in words
+                  if word.lower() not in POWER_WORDS and word.lower() != "process"]
+    syslog_style = re.compile(r"^[A-Z]{2,4}\d{3,5}[A-Z]?$")
+    candidates = [word for word in candidates if not syslog_style.match(word)] or candidates
+    if not candidates:
+        return None
+    process_token = candidates[0]
+    line_lower = line.lower()
+    finish_signals = ("complete", "finished", "end", "done", "ok", "success", "csar")
+    duration_match = re.search(r"elapsed|duration[ =:]+(\d+)", line_lower)
+    event_kind = "END" if any(signal in line_lower for signal in finish_signals) else "START"
+    duration_value = duration_match.group(1) if duration_match and duration_match.groups() else ""
+    return {
+        "ts": matched_ts,
+        "process": process_token,
+        "event": event_kind,
+        "duration": duration_value,
+    }
+
 def node_intake_register(context: NodeContext) -> NodeResult:
     from sassessment.intake.registration import register_batch
     candidates = [entry for entry in sorted(context.layout.intake_raw.iterdir())
@@ -382,11 +427,20 @@ def node_runtime_correlate(context: NodeContext) -> NodeResult:
             confidence="UNKNOWN")
 
     events_by_process: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    unstructured_lines = 0
     for path, _entry in log_files:
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            match = LOG_EVENT_RE.match(line.strip())
-            if match:
-                events_by_process[match.group("process").lower()].append(match.groupdict())
+            stripped = line.strip()
+            structured_match = LOG_EVENT_RE.match(stripped)
+            if structured_match:
+                events_by_process[structured_match.group("process").lower()].append(
+                    structured_match.groupdict())
+                continue
+            legacy_event = parse_legacy_log_event(stripped)
+            if legacy_event is not None:
+                events_by_process[legacy_event["process"].lower()].append(legacy_event)
+            else:
+                unstructured_lines += 1
 
     correlate_evidence: List[str] = []
     for process_name, events in sorted(events_by_process.items()):
@@ -423,12 +477,23 @@ def node_runtime_correlate(context: NodeContext) -> NodeResult:
     )
 
     total_executions = sum(len(events) for events in events_by_process.values())
+    if not events_by_process and unstructured_lines:
+        return NodeResult(
+            status="skipped",
+            summary="legacy logs present but none matched deterministic parsing; "
+                    "delegate semantic reading to the runtime.legacy_interpret agent node",
+            metrics={"unstructured_lines": unstructured_lines},
+            confidence="UNKNOWN",
+            limitations=["no structured events recognized; semantic interpretation required"],
+        )
+    status = "success" if events_by_process else "waiting_for_input"
     return NodeResult(
-        status="success" if events_by_process else "waiting_for_input",
+        status=status,
         summary=f"correlated runtime: {len(events_by_process)} process(es)",
         evidence_used=correlate_evidence,
         metrics={"correlated_processes": len(events_by_process),
-                 "executions": total_executions},
+                 "executions": total_executions,
+                 "unstructured_lines": unstructured_lines},
         confidence="CONFIRMED" if events_by_process else "UNKNOWN",
     )
 

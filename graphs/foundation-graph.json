@@ -1,6 +1,6 @@
 {
   "id": "sassessment-foundation",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Foundation assessment graph: intake -> SAS discovery -> runtime correlation -> documentation mapping + offline DBA lineage branch -> quality gate -> audit export.",
   "entry": "sys.workspace",
   "max_cycles": 40,
@@ -65,6 +65,15 @@
       "max_attempts": 3
     },
     {
+      "id": "runtime.legacy_interpret",
+      "type": "opencode",
+      "phase": "phase3",
+      "title": "Interpret legacy scheduler exports semantically (agent node)",
+      "agent": "runtime-analyst",
+      "handler": "legacy-log-interpret",
+      "max_attempts": 3
+    },
+    {
       "id": "doc.map_apps",
       "type": "deterministic",
       "phase": "phase4",
@@ -97,7 +106,12 @@
       "phase": "phase8",
       "title": "Quality gate: evidence traceability and unsupported-claim detection",
       "handler": "quality.gate",
-      "max_attempts": 5
+      "max_attempts": 5,
+      "requires": [
+        "sas.discover",
+        "runtime.correlate",
+        "doc.map_apps"
+      ]
     },
     {
       "id": "audit.export",
@@ -162,13 +176,6 @@
       }
     },
     {
-      "source": "runtime.correlate",
-      "target": "quality.gate",
-      "condition": {
-        "name": "always"
-      }
-    },
-    {
       "source": "doc.map_apps",
       "target": "quality.gate",
       "condition": {
@@ -192,6 +199,20 @@
     {
       "source": "inventory.extract",
       "target": "doc.map_apps",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "runtime.correlate",
+      "target": "runtime.legacy_interpret",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "runtime.legacy_interpret",
+      "target": "quality.gate",
       "condition": {
         "name": "always"
       }

@@ -178,7 +178,8 @@ class GraphEngine:
 
     def _dry_run_opencode_intent(self, node: NodeDef) -> Dict[str, Any]:
         from sassessment.opencode_adapter.adapter import OpenCodeAdapter
-        adapter = OpenCodeAdapter(self.config)
+        from sassessment.opencode_adapter.adapter import create_adapter
+        adapter = create_adapter(self.config)
         executable = self.config.opencode.executable
         return {
             "action": "would-invoke-opencode",
@@ -377,12 +378,12 @@ class GraphEngine:
     # -- agent nodes ----------------------------------------------------------------
 
     def _execute_opencode(self, node: NodeDef, context: NodeContext) -> NodeResult:
-        from sassessment.opencode_adapter.adapter import OpenCodeAdapter
+        from sassessment.opencode_adapter.adapter import create_adapter
         from sassessment.opencode_adapter.envelope import build_result_from_envelope
         from sassessment.prompts import render_prompt
 
         prompt = render_prompt(node, context)
-        adapter = OpenCodeAdapter(self.config)
+        adapter = create_adapter(self.config)
         invocation = None
         last_invocation = None
         retry_budget = max(self.config.limits.max_retries, 1)

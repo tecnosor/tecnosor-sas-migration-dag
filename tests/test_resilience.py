@@ -11,7 +11,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def make_config():
     cfg = load_config(repo_root=_REPO_ROOT)
-    cfg.opencode.executable = "mock"
+    cfg.opencode.executable = "opencode"
+    cfg.opencode.force_mock = False
     return cfg
 
 
@@ -42,6 +43,8 @@ def build_engine(tmp_path):
 
     cfg = load_config(repo_root=_REPO_ROOT)
     cfg.database_path = tmp_path / "resilient.sqlite"
+    cfg.opencode.executable = "opencode"
+    cfg.opencode.force_mock = False
     layout = ensure_workspace(tmp_path)
     migrations = tuple(
         (int(p.name.split("__")[0][1:]), p.name.split("__", 1)[1].replace(".sql", ""), p.read_text(encoding="utf-8"))

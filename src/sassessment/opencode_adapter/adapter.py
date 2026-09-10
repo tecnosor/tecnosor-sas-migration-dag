@@ -255,7 +255,7 @@ def mock_envelope_stdout(agent_name: str, message: str) -> str:
 
 
 def create_adapter(config, *, force_mock: bool = False):
-    if force_mock or config.opencode.executable == "mock":
+    if force_mock or config.opencode.executable == "mock" or getattr(config.opencode, "force_mock", False):
         return MockAdapter(config)
     adapter = OpenCodeAdapter(config)
     if adapter.available():

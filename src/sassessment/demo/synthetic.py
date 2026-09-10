@@ -7,6 +7,7 @@ from sassessment.cli.main import answer_request
 
 
 def run_synthetic_demo(context) -> int:
+    context.config.opencode.force_mock = True
     repo_root: Path = context.config.repo_root
     fixture_src = repo_root / "examples" / "synthetic-fixture"
     raw_target = context.layout.intake_raw / "BAT-demo-fixture"
