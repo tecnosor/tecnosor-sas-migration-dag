@@ -128,6 +128,15 @@
   goal: espera muestras reales del usuario para calibrar (logs legacy, inventarios xlsx con headers reales, .xls sin converter disponible)
   status: pending
 
+- id: DMFPARSER
+  slice: DMF
+  goal: parser DMF determinista v1.3.0 completo (assembler multilinea/TB_LOG quote-aware/source echo/lifecycle correlator/status hierarchy/golden fixtures/docs); 102 tests verdes; pushed 9c79ebf
+  status: completed
+- id: DMFPARSER2
+  slice: DMF
+  goal: pendiente calibracion con log real 14MB del usuario - streaming 14MB test, encodings legacy, corpus golden ampliado (35 casos del espec), metrica de cobertura sobre el log real
+  status: pending
+
 - id: FINAL
   slice: FINAL
   goal: pytest completo verde + validate + demo + self-review (seccion 19) + fixes + <promise>DONE</promise>
