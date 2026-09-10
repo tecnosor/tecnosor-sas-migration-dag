@@ -180,6 +180,7 @@ def cmd_logs(context: ApplicationContext) -> int:
 
 
 def cmd_scan_inputs(context: ApplicationContext) -> int:
+    context.ensure_bootstrap()
     candidates = [entry for entry in sorted(context.layout.intake_raw.iterdir())
                   if entry.is_dir() and not entry.name.startswith(".")]
     if not candidates:
