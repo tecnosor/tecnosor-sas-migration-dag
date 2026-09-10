@@ -24,6 +24,7 @@ workspace/sessions/
 workspace/executions/
 workspace/checkpoints/
 workspace/audit/events.jsonl*
+workspace/audit/export-*
 workspace/database/*.db
 workspace/database/*.db-*
 analysis/normalized/
