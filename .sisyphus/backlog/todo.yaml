@@ -73,15 +73,15 @@
 
 - id: C1
   slice: C
-  goal: CLI commands (init/status/start/resume/next/run/add-input/scan-inputs/show block|graph|requests/answer/checkpoint/sessions/history/review/export-audit/validate/demo/quit) + REPL + tests
-  files: [src/sassessment/cli/, tests/test_cli.py]
-  status: pending
+  goal: CLI commands + REPL + tests
+  files: [src/sassessment/cli/main.py, tests/test_cli.py]
+  status: completed
 
 - id: G1
   slice: G
-  goal: foundation graph JSON versionado (phases 0-8, composite subgraphs con cycle caps)
+  goal: foundation graph JSON versionado (10 nodes, fases 0-8)
   files: [graphs/foundation-graph.json]
-  status: pending
+  status: completed
 - id: G2
   slice: G
   goal: synthetic fixtures — 2 SAS sources, 1 macro/include, 1 Oracle table read + 1 write, 1 runtime log (un proceso), dependency DB faltante, 1 data dictionary (table→app)
@@ -89,9 +89,9 @@
   status: pending
 - id: G3
   slice: G
-  goal: demo runner (sassessment demo) ejecuta flujo 14 pasos + smoke test pytest + ejecutar demo real
-  files: [src/sassessment/demo/, tests/test_demo.py]
-  status: pending
+  goal: demo runner (sassessment demo, flujo 14 pasos VERDE en ejecucion real) + smoke en tests/test_cli.py
+  files: [src/sassessment/demo/synthetic.py, tests/test_cli.py]
+  status: completed
 
 - id: H1
   slice: H
