@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from sassessment.errors import IntakeError
+from sassessment.intake.legacy_xls import convert_xls_to_xlsx
 from sassessment.nodes.base import (
     HumanRequestSpec,
     NodeContext,
@@ -220,11 +222,34 @@ def node_inventory_extract(context: NodeContext) -> NodeResult:
             elif media_type == "office-excel-legacy":
                 legacy_xls.append(str(entry.get("path", "")))
 
-    for legacy_path in legacy_xls:
-        short_name = legacy_path.split("/")[-1]
-        context.register_gap(
-            f"legacy .xls workbook needs conversion to .xlsx or csv: {short_name}",
-            "phase1")
+    legacy_converted: List[Path] = []
+    for manifest_path in sorted(context.layout.intake_manifests.glob("*.yaml")):
+        manifest = _read_yaml(manifest_path)
+        if not manifest:
+            continue
+        legacy_batch_dir = Path(str(manifest.get("raw_dir", "")))
+        for legacy_relative in manifest.get("files", []):
+            media_type = str(legacy_relative.get("media_type"))
+            legacy_file = legacy_batch_dir / str(legacy_relative.get("path", ""))
+            if media_type != "office-excel-legacy" or not legacy_file.is_file():
+                continue
+            staging_dir = context.layout.intake_staged / legacy_file.stem
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                converted = convert_xls_to_xlsx(legacy_file, staging_dir)
+            except IntakeError as conversion_error:
+                short_name = str(legacy_relative.get("path")).split("/")[-1]
+                context.register_gap(
+                    f"legacy .xls workbook not readable automatically: {short_name} "
+                    f"({conversion_error})",
+                    "phase1")
+                continue
+            legacy_converted.append(converted)
+            context.register_evidence(
+                "xlsx-converted",
+                f"legacy workbook {legacy_file.name} converted offline to .xlsx",
+                locator=str(converted))
+    workbook_files.extend(legacy_converted)
     if not workbook_files:
         return NodeResult(
             status="waiting_for_input",
