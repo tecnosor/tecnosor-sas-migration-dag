@@ -1,0 +1,51 @@
+# SASsessment default configuration.
+# Precedence: these defaults < environment variables (SASSESSMENT_*) < CLI flags.
+# Do not place secrets here; use environment variables for anything sensitive.
+
+opencode:
+  executable: opencode
+  # Default model used for LLM-powered nodes (provider/model format)
+  default_model: opencode-go/glm-5.3-flash
+  # Specialist agent names resolved in .opencode/agent/
+  agents:
+    coordinator: sassessment-coordinator
+    evidence_curator: evidence-curator
+    sas_analyst: sas-estate-analyst
+    runtime_analyst: runtime-analyst
+    lineage_analyst: lineage-analyst
+    migration_architect: migration-architect
+    reviewer: assessment-reviewer
+  # Per-node timeout for headless invocations
+  timeout_seconds: 600
+  # Cap on captured subprocess output per stream
+  max_output_bytes: 1048576
+
+limits:
+  max_retries: 2                 # automatic retries per node after failure
+  max_graph_cycles: 25           # global cycle counter guard
+  max_node_attempts: 5           # hard cap incl. manual re-runs
+  lineage_max_depth: 2           # bounded lineage expansion depth
+  lineage_max_iterations: 3      # iterative subgraph cycle cap
+  evidence_max_bytes: 52428800   # 50 MiB per evidence artifact index
+  subprocess_output_max_bytes: 1048576
+
+connectors:
+  enabled:
+    database: false
+    gitlab: false
+    confluence: false
+    sas_metadata: false
+  # Live systems always require explicit human approval before any access
+  approval_policy: explicit
+
+redaction:
+  # Applied to audit events, logs and persisted execution records.
+  patterns:
+    - '(?i)(password|passwd|pwd)\s*[=:]\s*\S+'
+    - '(?i)(api[_-]?key|apikey)\s*[=:]\s*\S+'
+    - '(?i)(secret|token|credential)[a-z_]*\s*[=:]\s*\S+'
+    - '(?i)bearer\s+[A-Za-z0-9._\-]+'
+    - '(?i)-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----'
+
+demo:
+  fixtures_dir: examples/synthetic-fixture

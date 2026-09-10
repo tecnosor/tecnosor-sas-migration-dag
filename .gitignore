@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local state that should not be shared
+.env
+*.local.md
+
+# Assessment runtime data (durable state lives in workspace/, evidence in intake/)
+# Keep directory structure via .gitkeep but ignore volatile content:
+intake/raw/*/
+!intake/raw/.gitkeep
+intake/staged/
+intake/quarantine/
+workspace/sessions/
+workspace/executions/
+workspace/checkpoints/
+workspace/audit/events.jsonl*
+workspace/database/*.db
+workspace/database/*.db-*
+analysis/normalized/
+analysis/inventory/
+analysis/runtime/
+analysis/lineage/
+analysis/scoring/
+analysis/recommendations/
+analysis/quality/
+deliverables/draft/
+deliverables/review/
+deliverables/validated/
+deliverables/final/
+
+# OS
+.DS_Store
+Thumbs.db

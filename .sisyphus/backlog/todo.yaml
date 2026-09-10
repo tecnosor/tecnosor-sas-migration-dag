@@ -1,0 +1,112 @@
+# SASsessment build backlog — estado estructurado
+# Slices: A(core) B(graph) D(intake) E(adapter) F(nodes) C(cli) G(demo) H(docs)
+# Estados: completed | in_progress | pending
+# Regla: al completar una tarea aquí, actualizarla también en STATE.md
+
+- id: A1
+  slice: A
+  goal: git init + pyproject + package skeleton + workspace scaffolding (layout.py)
+  status: completed
+- id: A2
+  slice: A
+  goal: config module (defaults/file/env precedence) + config/default.yaml + .env.example
+  status: completed
+- id: A3
+  slice: A
+  goal: ids + errors modules (prefixed IDs, typed error hierarchy)
+  status: completed
+- id: A4
+  slice: A
+  goal: SQLite wrapper + migrations (schema v1, 19 tablas) + repository layer
+  status: completed
+- id: A5
+  slice: A
+  goal: audit events (JSONL append-only + SQLite index + secret redaction)
+  status: completed
+- id: A6
+  slice: A
+  goal: checkpoint manager (immutable snapshots, verify/restore)
+  status: completed
+- id: A7
+  slice: A
+  goal: tests Slice A (18) verdes
+  status: completed
+
+- id: B1
+  slice: B
+  goal: graph model (NodeDef/EdgeDef/GraphDef) + JSON loader + validation (node/edge refs, categories, unknown node)
+  files: [src/sassessment/graph/model.py, src/sassessment/graph/loader.py, graphs/]
+  status: pending
+- id: B2
+  slice: B
+  goal: structured condition predicates (deterministic eval sobre project_state + extras)
+  files: [src/sassessment/graph/predicates.py]
+  status: pending
+- id: B3
+  slice: B
+  goal: engine (select_next, execute node via registry, retry/cycle limits, branch waiting, resume, checkpoint-before-transition) + tests
+  files: [src/sassessment/graph/engine.py, tests/test_graph.py]
+  status: pending
+
+- id: D1
+  slice: D
+  goal: intake scanner (nuevos batches en intake/raw/) + registration + manifest + SHA-256 hashing + duplicate detection
+  files: [src/sassessment/intake/scanner.py, src/sassessment/intake/registration.py]
+  status: pending
+- id: D2
+  slice: D
+  goal: safe archive staging (zip/tar traversal rejection, symlink escape, nested archives, encrypted/unsupported behavior, quarantine) + intake tests
+  files: [src/sassessment/intake/staging.py, tests/test_intake.py]
+  status: pending
+
+- id: E1
+  slice: E
+  goal: OpenCode adapter (capability discovery via --version/--help, argv-only subprocess run, timeout, output caps, prompt hash, session capture) + MockAdapter + envelope JSON Schema validation + tests
+  files: [src/sassessment/opencode_adapter/adapter.py, src/sassessment/opencode_adapter/mock.py, schemas/result-envelope.schema.json, tests/test_adapter.py]
+  status: pending
+
+- id: F1
+  slice: F
+  goal: node framework — contracts (NodeContext/NodeResult), registry, deterministic/agent/human/quality-gate/checkpoint/composite node executors + prompts packaging
+  files: [src/sassessment/nodes/]
+  status: pending
+
+- id: C1
+  slice: C
+  goal: CLI commands (init/status/start/resume/next/run/add-input/scan-inputs/show block|graph|requests/answer/checkpoint/sessions/history/review/export-audit/validate/demo/quit) + REPL + tests
+  files: [src/sassessment/cli/, tests/test_cli.py]
+  status: pending
+
+- id: G1
+  slice: G
+  goal: foundation graph JSON versionado (phases 0-8, composite subgraphs con cycle caps)
+  files: [graphs/foundation-graph.json]
+  status: pending
+- id: G2
+  slice: G
+  goal: synthetic fixtures — 2 SAS sources, 1 macro/include, 1 Oracle table read + 1 write, 1 runtime log (un proceso), dependency DB faltante, 1 data dictionary (table→app)
+  files: [examples/synthetic-fixture/]
+  status: pending
+- id: G3
+  slice: G
+  goal: demo runner (sassessment demo) ejecuta flujo 14 pasos + smoke test pytest + ejecutar demo real
+  files: [src/sassessment/demo/, tests/test_demo.py]
+  status: pending
+
+- id: H1
+  slice: H
+  goal: agents/*.md (7 roles) + skills SKILL.md (~24 skills) OpenCode-discoverables via .opencode/
+  status: pending
+- id: H2
+  slice: H
+  goal: documentacion completa (README, AGENTS.md, architecture, graph, state, adapter, authoring, evidence policy, runbooks, threat model, guides, ADRs, demo walkthrough)
+  status: pending
+- id: H3
+  slice: H
+  goal: backlog slices A-H documentado + decision/assumption/risk registers + handoff + bootstrap report
+  status: pending
+
+- id: FINAL
+  slice: FINAL
+  goal: pytest completo verde + validate + demo + self-review (seccion 19) + fixes + <promise>DONE</promise>
+  status: pending
