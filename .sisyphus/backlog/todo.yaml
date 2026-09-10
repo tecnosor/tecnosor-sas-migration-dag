@@ -119,9 +119,13 @@
   slice: REAL
   goal: nodo agente OpenCode runtime.legacy_interpret (graph v1.2.1) + prompt template prompts/legacy-log-interpret.md + mock default / real opt-in (opencode.force_mock=true default)
   status: completed
-- id: REALDATA3
+- id: REALDATA3a
   slice: REAL
-  goal: pending user feedback: .xls binario conversion (hoy gap), ajustar heuristics con logs reales cuando lleguen, validar afluencia inventarios xlsx con formato real
+  goal: .xls binario conversion offline via soffice/libreoffice/ssconvert (argv-only, timeout 120s, gap al fallar); wired in inventory.extract; 5 tests nuevos (test_legacy_xls.py)
+  status: completed
+- id: REALDATA3b
+  slice: REAL
+  goal: espera muestras reales del usuario para calibrar (logs legacy, inventarios xlsx con headers reales, .xls sin converter disponible)
   status: pending
 
 - id: FINAL
