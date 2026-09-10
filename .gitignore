@@ -20,6 +20,8 @@ intake/raw/*/
 !intake/raw/.gitkeep
 intake/staged/
 intake/quarantine/
+intake/manifests/*.yaml
+intake/manifests/*.json
 workspace/sessions/
 workspace/executions/
 workspace/checkpoints/
@@ -42,3 +44,6 @@ deliverables/final/
 # OS
 .DS_Store
 Thumbs.db
+
+# batch manifests are runtime-generated
+intake/manifests/*.yaml

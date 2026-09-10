@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -38,6 +39,7 @@ def build_registry() -> NodeRegistry:
     registry.register(node_sys_workspace, names=["sys.workspace"])
     registry.register(node_intake_register, names=["intake.register"])
     registry.register(node_intake_coverage, names=["intake.coverage"])
+    registry.register(node_inventory_extract, names=["inventory.extract"])
     registry.register(node_sas_discover, names=["sas.discover"])
     registry.register(node_runtime_correlate, names=["runtime.correlate"])
     registry.register(node_dba_request, names=["lineage.dba_request"])
@@ -124,6 +126,125 @@ def node_intake_coverage(context: NodeContext) -> NodeResult:
         metrics=dict(coverage),
         confidence="CONFIRMED" if has_sas else "INFERRED",
     )
+
+
+INVENTORY_HEADER_HINTS = ("object_name", "table", "table_name", "tabla", "object", "schema", "esquema")
+PROCESS_HEADER_HINTS = ("proceso", "process", "job", "programa", "sas_program", "program")
+APPLICATION_HINTS = ("application", "aplicacion", "app", "owner_app", "system", "sistema")
+
+
+def _read_workbook_sheets(xlsx_path: Path) -> Dict[str, list]:
+    from sassessment.intake.xlsx_reader import read_xlsx
+    try:
+        return read_xlsx(xlsx_path)
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return {}
+
+
+def _sheet_classifier(header_keys: list) -> str:
+    lowered = {str(key).strip().lower() for key in header_keys}
+    if lowered.intersection(INVENTORY_HEADER_HINTS):
+        return "inventory"
+    if lowered.intersection(PROCESS_HEADER_HINTS):
+        return "process"
+    return "other"
+
+
+def _lookup_hint(record: dict, hints: tuple) -> str:
+    for key in record:
+        if str(key).strip().lower() in hints:
+            value = str(record[key]).strip()
+            if value:
+                return value
+    return ""
+
+
+def node_inventory_extract(context: NodeContext) -> NodeResult:
+    workbook_files: List[Path] = []
+    legacy_xls: List[str] = []
+    for manifest_path in sorted(context.layout.intake_manifests.glob("*.yaml")):
+        manifest = _read_yaml(manifest_path)
+        if not manifest:
+            continue
+        batch_dir = Path(str(manifest.get("raw_dir", "")))
+        for entry in manifest.get("files", []):
+            media_type = str(entry.get("media_type"))
+            file_path = batch_dir / str(entry.get("path", ""))
+            if media_type == "office-excel" and file_path.is_file() and file_path.suffix.lower() == ".xlsx":
+                workbook_files.append(file_path)
+            elif media_type == "office-excel-legacy":
+                legacy_xls.append(str(entry.get("path", "")))
+
+    for legacy_path in legacy_xls:
+        short_name = legacy_path.split("/")[-1]
+        context.register_gap(
+            f"legacy .xls workbook needs conversion to .xlsx or csv: {short_name}",
+            "phase1")
+    if not workbook_files:
+        return NodeResult(
+            status="waiting_for_input",
+            summary="no .xlsx inventory workbooks available",
+            confidence="UNKNOWN",
+            limitations=["place .xlsx inventories under intake/raw/<source-batch-id>/",
+                         "legacy .xls must be converted to .xlsx or csv"])
+    extracted_tables = 0
+    extracted_processes = 0
+    mapped_rows = 0
+    for xlsx_path in sorted(workbook_files):
+        sheets = _read_workbook_sheets(xlsx_path)
+        sheet_evidence: list = []
+        for sheet_name, records in sorted(sheets.items()):
+            if not records:
+                continue
+            headers = sorted(records[0].keys())
+            evidence = context.register_evidence(
+                "xlsx-inventory",
+                f"workbook {xlsx_path.name}, sheet {sheet_name}: {len(records)} rows, "
+                f"columns: {', '.join(headers[:10])}",
+                locator=f"xlsx:{xlsx_path.name}#{sheet_name}")
+            inventory_kind = _sheet_classifier(headers)
+            if inventory_kind == "inventory":
+                for record in records:
+                    table_name = _lookup_hint(record, INVENTORY_HEADER_HINTS)
+                    application = _lookup_hint(record, APPLICATION_HINTS)
+                    if not table_name:
+                        continue
+                    context.upsert_domain_object("table", table_name, evidence_id=evidence)
+                    extracted_tables += 1
+                    if application:
+                        ownership_evidence = context.register_evidence(
+                            "application",
+                            f"{table_name} owned by {application}",
+                            locator=f"xlsx:{xlsx_path.name}#{sheet_name}")
+                        context.add_lineage_edge(
+                            f"app:{application}",
+                            f"db:{table_name.strip().upper()}", "owns",
+                            extraction_method="xlsx-inventory",
+                            evidence_ids=[ownership_evidence],
+                            confidence="CONFIRMED",
+                            validation_status="VALIDATED")
+                        mapped_rows += 1
+            elif inventory_kind == "process":
+                for record in records:
+                    process_name = _lookup_hint(record, PROCESS_HEADER_HINTS)
+                    if not process_name:
+                        continue
+                    context.upsert_domain_object("sas_process", process_name,
+                                                 evidence_id=evidence)
+                    extracted_processes += 1
+    if not any(expected for expected in (extracted_tables, extracted_processes)):
+        return NodeResult(
+            status="skipped",
+            summary="xlsx workbooks found but no recognizable inventory headers",
+            confidence="INFERRED",
+            limitations=["expected headers like object_name/table/proceso for table or process inventories"])
+    return NodeResult(
+        status="success",
+        summary=f"extracted {extracted_tables} table(s) and {extracted_processes} process(es) "
+                f"from xlsx inventories",
+        metrics={"tables": extracted_tables, "processes": extracted_processes,
+                 "mappings": mapped_rows},
+        confidence="INFERRED")
 
 
 def node_sas_discover(context: NodeContext) -> NodeResult:

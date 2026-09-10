@@ -1,10 +1,17 @@
 {
   "id": "sassessment-foundation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Foundation assessment graph: intake -> SAS discovery -> runtime correlation -> documentation mapping + offline DBA lineage branch -> quality gate -> audit export.",
   "entry": "sys.workspace",
   "max_cycles": 40,
-  "phases": ["phase0", "phase1", "phase2", "phase3", "phase4", "phase8"],
+  "phases": [
+    "phase0",
+    "phase1",
+    "phase2",
+    "phase3",
+    "phase4",
+    "phase8"
+  ],
   "nodes": [
     {
       "id": "sys.workspace",
@@ -30,6 +37,14 @@
       "title": "Assess evidence coverage and create missing-input requests",
       "handler": "intake.coverage",
       "phase_gate": true,
+      "max_attempts": 3
+    },
+    {
+      "id": "inventory.extract",
+      "type": "deterministic",
+      "phase": "phase1",
+      "title": "Extract XLSX inventories (tables, processes, app ownership)",
+      "handler": "inventory.extract",
       "max_attempts": 3
     },
     {
@@ -71,7 +86,9 @@
       "phase": "phase4",
       "title": "Ingest DBA export and resume lineage branch",
       "handler": "lineage.ingest_dba",
-      "requires": ["sas.discover"],
+      "requires": [
+        "sas.discover"
+      ],
       "max_attempts": 3
     },
     {
@@ -88,20 +105,96 @@
       "phase": "phase8",
       "title": "Export audit trail package",
       "handler": "audit.export",
-      "requires": ["quality.gate"],
+      "requires": [
+        "quality.gate"
+      ],
       "max_attempts": 3
     }
   ],
   "edges": [
-    {"source": "sys.workspace", "target": "intake.register", "condition": {"name": "always"}},
-    {"source": "intake.register", "target": "intake.coverage", "condition": {"name": "always"}},
-    {"source": "intake.coverage", "target": "sas.discover", "condition": {"name": "always"}},
-    {"source": "intake.coverage", "target": "runtime.correlate", "condition": {"name": "always"}},
-    {"source": "sas.discover", "target": "doc.map_apps", "condition": {"name": "always"}},
-    {"source": "sas.discover", "target": "lineage.dba_request", "condition": {"name": "always"}},
-    {"source": "lineage.dba_request", "target": "lineage.ingest_dba", "condition": {"name": "always"}},
-    {"source": "runtime.correlate", "target": "quality.gate", "condition": {"name": "always"}},
-    {"source": "doc.map_apps", "target": "quality.gate", "condition": {"name": "always"}},
-    {"source": "quality.gate", "target": "audit.export", "condition": {"name": "always"}}
+    {
+      "source": "sys.workspace",
+      "target": "intake.register",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "intake.register",
+      "target": "intake.coverage",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "intake.coverage",
+      "target": "inventory.extract",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "intake.coverage",
+      "target": "runtime.correlate",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "sas.discover",
+      "target": "doc.map_apps",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "sas.discover",
+      "target": "lineage.dba_request",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "lineage.dba_request",
+      "target": "lineage.ingest_dba",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "runtime.correlate",
+      "target": "quality.gate",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "doc.map_apps",
+      "target": "quality.gate",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "quality.gate",
+      "target": "audit.export",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "intake.coverage",
+      "target": "sas.discover",
+      "condition": {
+        "name": "always"
+      }
+    },
+    {
+      "source": "inventory.extract",
+      "target": "doc.map_apps",
+      "condition": {
+        "name": "always"
+      }
+    }
   ]
 }

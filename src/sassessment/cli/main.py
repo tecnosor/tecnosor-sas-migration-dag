@@ -193,6 +193,57 @@ def cmd_scan_inputs(context: ApplicationContext) -> int:
     return 0
 
 
+def cmd_inspect(context: ApplicationContext, target: str) -> int:
+    """Preview what the foundation would extract from a raw batch without running nodes."""
+    from sassessment.intake.xlsx_reader import read_xlsx
+    context.ensure_bootstrap()
+    batch_dir = Path(target).expanduser()
+    if not batch_dir.is_absolute():
+        candidate = context.layout.intake_raw / target
+        batch_dir = candidate if candidate.is_dir() else context.config.repo_root / target
+    if not batch_dir.is_dir():
+        print(f"batch directory not found: {target}")
+        return 1
+    files = [path for path in sorted(batch_dir.rglob("*")) if path.is_file() and not path.name.startswith(".")]
+    if not files:
+        print(f"empty batch: {batch_dir}")
+        return 1
+    print(f"batch: {batch_dir} ({len(files)} files)")
+    csv_rows = 0
+    for file_path in files:
+        suffix = file_path.suffix.lower()
+        report_line = f"  {file_path.relative_to(batch_dir)} ({file_path.stat().st_size} bytes)"
+        print(report_line)
+        if suffix == ".xlsx":
+            try:
+                sheets = read_xlsx(file_path)
+            except Exception as exc:
+                print(f"    [xlsx unreadable: {exc}]")
+                continue
+            for sheet_name, records in sorted(sheets.items()):
+                headers = sorted(records[0].keys()) if records else []
+                print(f"    sheet '{sheet_name}': {len(records)} rows, columns: {', '.join(headers[:12])}")
+                for sample in records[:2]:
+                    preview = {key: str(value)[:40] for key, value in list(sample.items())[:6]}
+                    print(f"      sample: {preview}")
+        elif suffix in (".log", ".txt"):
+            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            for sample in lines[:4]:
+                print(f"    | {sample[:120]}")
+            if len(lines) > 4:
+                print(f"    ... {len(lines)} lines total")
+        elif suffix == ".sas":
+            text = file_path.read_text(encoding="utf-8", errors="replace")
+            includes = len(__import__("re").findall(r"%include", text, __import__("re").IGNORECASE))
+            from sassessment.demo.nodes import FROM_RE, JOIN_RE, SET_MERGE_RE, DATA_STEP_RE, MACRO_DEF_RE
+            tokens = (
+                len(FROM_RE.findall(text)) + len(JOIN_RE.findall(text))
+                + len(SET_MERGE_RE.findall(text)) + len(DATA_STEP_RE.findall(text))
+                + len(MACRO_DEF_RE.findall(text)) + includes)
+            print(f"    SAS tokens found: {tokens} (data-step/sql reads+writes, macros, includes={includes})")
+    return 0
+
+
 def cmd_add_input(context: ApplicationContext, source: str) -> int:
     source_path = Path(source).expanduser().resolve()
     if not source_path.exists():
@@ -377,6 +428,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("node", nargs="?", default=None)
     run_parser.add_argument("--dry-run", action="store_true")
     scan = subparsers.add_parser("scan-inputs")
+    inspect = subparsers.add_parser("inspect")
+    inspect.add_argument("target", nargs="?", default=None)
     add = subparsers.add_parser("add-input")
     add.add_argument("path")
     answer = subparsers.add_parser("answer")
@@ -415,6 +468,8 @@ def dispatch(args: argparse.Namespace) -> int:
             return cmd_run(context, node_id=args.node, dry_run=args.dry_run)
         if args.command == "scan-inputs":
             return cmd_scan_inputs(context)
+        if args.command == "inspect":
+            return cmd_inspect(context, args.target or "intake/raw")
         if args.command == "add-input":
             return cmd_add_input(context, args.path)
         if args.command == "answer":
