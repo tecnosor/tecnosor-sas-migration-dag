@@ -78,6 +78,12 @@ class GraphEngine:
         state["resolved_requests"] = [
             str(r["id"]) for r in self.repo.list_requests(self.assessment_id) if r["status"] == "RESOLVED"
         ]
+        flags: Dict[str, Any] = {}
+        for key, value in [("flag:runtime.legacy_interpret_needed", "runtime.legacy_interpret_needed")]:
+            stored = self.repo.get_meta(key)
+            if stored is not None:
+                flags[value] = stored
+        state["flags"] = flags
         if extras:
             state.update(extras)
         return state

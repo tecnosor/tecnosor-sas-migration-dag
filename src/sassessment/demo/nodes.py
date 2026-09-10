@@ -44,6 +44,7 @@ def build_registry() -> NodeRegistry:
     registry.register(node_inventory_extract, names=["inventory.extract"])
     registry.register(node_sas_discover, names=["sas.discover"])
     registry.register(node_runtime_correlate, names=["runtime.correlate"])
+    registry.register(node_runtime_dmf_logs, names=["runtime.dmf_logs"])
     registry.register(node_dba_request, names=["lineage.dba_request"])
     registry.register(node_doc_mapping, names=["doc.map_apps"])
     registry.register(node_ingest_dba, names=["lineage.ingest_dba"])
@@ -521,6 +522,74 @@ def node_runtime_correlate(context: NodeContext) -> NodeResult:
                  "unstructured_lines": unstructured_lines},
         confidence="CONFIRMED" if events_by_process else "UNKNOWN",
     )
+
+
+def node_runtime_dmf_logs(context: NodeContext) -> NodeResult:
+    """Deterministic DMF/SAS log parsing for registered log-text artifacts."""
+    log_files: list = []
+    for manifest_path in sorted(context.layout.intake_manifests.glob("*.yaml")):
+        manifest = _read_yaml(manifest_path)
+        if not manifest:
+            continue
+        batch_dir = Path(str(manifest.get("raw_dir", "")))
+        for entry in manifest.get("files", []):
+            if str(entry.get("media_type")) in ("log-text", "text"):
+                candidate = batch_dir / str(entry.get("path", ""))
+                if candidate.is_file():
+                    log_files.append((candidate, entry))
+    if not log_files:
+        return NodeResult(
+            status="skipped",
+            summary="no runtime log files under intake/raw/<source-batch-id>/",
+            confidence="UNKNOWN",
+            limitations=["place *.log/*.txt under intake/raw/<source-batch-id>/"])
+    from sassessment.legacy_logs.engine import parse_file
+    from sassessment.legacy_logs.model import write_parse_summary
+    analysis_dir = context.config.repo_root / "analysis" / "runtime"
+    evidence_ids: list = []
+    total_events = 0
+    total_dmf_stages = 0
+    incomplete_lifecycle_count = 0
+    max_unclassified_pct = 0.0
+    runs: list = []
+    for log_path, _entry in log_files:
+        parsed = parse_file(log_path)
+        summary_path = write_parse_summary(parsed, analysis_dir / f"{log_path.stem}.dmf-summary.json")
+        evidence = context.register_evidence(
+            "dmf-log-analysis",
+            f"parsed {log_path.name}: {len(parsed.records)} logical records, "
+            f"outcome={parsed.metrics.get('global_outcome')}",
+            locator=str(summary_path))
+        evidence_ids.append(evidence)
+        total_events += len(parsed.records)
+        total_dmf_stages += len(parsed.lifecycle)
+        incomplete_lifecycle_count += int(parsed.metrics.get("incomplete_lifecycle_count", 0))
+        runs.extend(iteration_runs := _loop_runs(parsed))
+        max_unclassified_pct = max(
+            max_unclassified_pct, float(parsed.metrics.get("unclassified_percent", 0.0)))
+        context.register_finding(
+            f"DMF log {log_path.name}: global_outcome={parsed.metrics.get('global_outcome')}, "
+            f"iterations={parsed.metrics.get('iterations')}, sleeps={len(parsed.metrics.get('sleeps') or [])}",
+            "dmf-runtime", confidence="INFERRED", evidence_ids=[evidence],
+            extraction_method="deterministic-dmf-log-parser",
+            scope=str(log_path),
+            limitations="legacy DMF log parser is deterministic but may leave some non-structured records unclassified")
+    if max_unclassified_pct >= 40.0:
+        context.repo.set_meta("flag:runtime.legacy_interpret_needed", "1")
+    context.log(f"DMF parsing: {total_events} records across {len(log_files)} log(s)")
+    return NodeResult(
+        status="success",
+        summary=f"parsed DMF logs: {total_events} logical records, "
+                f"lifecycles {total_dmf_stages}, unclassified {max_unclassified_pct:.1f}%",
+        evidence_used=evidence_ids,
+        metrics={"records": total_events, "lifecycle": total_dmf_stages,
+                 "iterations": runs[:6]},
+        confidence="INFERRED")
+
+
+def _loop_runs(parsed):
+    from sassessment.legacy_logs.lifecycle import iterate_loop_runs
+    return iterate_loop_runs(parsed.records)
 
 
 def node_dba_request(context: NodeContext) -> NodeResult:
