@@ -1,0 +1,31 @@
+batch_id: BAT-res-af6b2d7b
+provider: ''
+source_team: ''
+environment: ''
+delivery_date: '2026-09-10T14:27:58Z'
+authority_level: SUBSIDIARY
+confidentiality: INTERNAL
+raw_dir: /Users/madraza/Negocios/BNP/SAS/intake/raw/req-req-20260910-af6b2d7b
+integrity_hash: e905d428be7fa964970836ffeaf4d5f88272a51fc6e3e73705a11005f25de914
+files:
+- path: REQUEST.md
+  sha256: 0b91f1523b34c18e1898bc874e12ee594f1f0b28a8d2f4440a7f6e960c0aae92
+  size: 803
+  media_type: markdown
+  artifact_id: ART-04487c4d57
+  duplicate: false
+- path: all_dependencies_export.csv
+  sha256: bb0eb80d4c2aea41681d5390e998dc08c106330ad0e10f4fd013f09183aa3726
+  size: 234
+  media_type: csv
+  artifact_id: ART-5cd5929842
+  duplicate: false
+- path: query-pack.sql
+  sha256: 54ac1b8899b275f30a3accf194ce3bc1c954542f1fb8bbe1eaf605c38d491e36
+  size: 179
+  media_type: sql-plsql
+  artifact_id: ART-08fa253ec5
+  duplicate: false
+duplicate_references: []
+known_omissions: ''
+raw_immutable: true

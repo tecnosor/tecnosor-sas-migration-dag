@@ -142,6 +142,14 @@ class OpenCodeAdapter:
         )
 
 
+def _extract_session(stdout: str) -> Optional[str]:
+    match = re.search(r"ses_[0-9a-zA-Z]+", stdout)
+    if match:
+        return match.group(0)
+    match = re.search(r"session[\"':=\s]+([0-9a-fA-F-]{16,64})", stdout)
+    return match.group(1) if match else None
+
+
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 

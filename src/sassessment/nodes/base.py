@@ -92,6 +92,7 @@ class NodeContext:
         self.repo = repo
         self.audit = audit
         self.layout = layout
+        self.config = config
         self.log_lines: List[str] = []
 
     def log(self, message: str) -> None:
@@ -193,7 +194,8 @@ class NodeContext:
     def upsert_domain_object(self, object_type: str, name: str, *, schema_name: str = "",
                              evidence_id: str = "") -> str:
         from sassessment.ids import short_token
-        normalized = name.strip().upper().replace(" ", "_")
+        tail = name.strip().split(".")[-1]
+        normalized = tail.strip().upper().replace(" ", "_")
         doc_id = f"DO-{short_token(10)}"
         self.repo.upsert_data_object(doc_id, self.assessment_id, object_type, name,
                                      schema_name=schema_name, normalized_name=normalized,

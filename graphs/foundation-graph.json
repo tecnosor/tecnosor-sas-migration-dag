@@ -1,0 +1,107 @@
+{
+  "id": "sassessment-foundation",
+  "version": "1.0.0",
+  "description": "Foundation assessment graph: intake -> SAS discovery -> runtime correlation -> documentation mapping + offline DBA lineage branch -> quality gate -> audit export.",
+  "entry": "sys.workspace",
+  "max_cycles": 40,
+  "phases": ["phase0", "phase1", "phase2", "phase3", "phase4", "phase8"],
+  "nodes": [
+    {
+      "id": "sys.workspace",
+      "type": "deterministic",
+      "phase": "phase0",
+      "title": "Initialize and inspect workspace",
+      "handler": "sys.workspace",
+      "phase_gate": true,
+      "max_attempts": 3
+    },
+    {
+      "id": "intake.register",
+      "type": "deterministic",
+      "phase": "phase1",
+      "title": "Register raw batches",
+      "handler": "intake.register",
+      "max_attempts": 5
+    },
+    {
+      "id": "intake.coverage",
+      "type": "deterministic",
+      "phase": "phase1",
+      "title": "Assess evidence coverage and create missing-input requests",
+      "handler": "intake.coverage",
+      "phase_gate": true,
+      "max_attempts": 3
+    },
+    {
+      "id": "sas.discover",
+      "type": "deterministic",
+      "phase": "phase2",
+      "title": "Discover SAS artifacts and candidate processes (static placeholder)",
+      "handler": "sas.discover",
+      "phase_gate": true,
+      "max_attempts": 3
+    },
+    {
+      "id": "runtime.correlate",
+      "type": "deterministic",
+      "phase": "phase3",
+      "title": "Correlate runtime evidence; classify orphan candidates",
+      "handler": "runtime.correlate",
+      "max_attempts": 3
+    },
+    {
+      "id": "doc.map_apps",
+      "type": "deterministic",
+      "phase": "phase4",
+      "title": "Map tables to applications from data dictionaries",
+      "handler": "doc.map_apps",
+      "max_attempts": 3
+    },
+    {
+      "id": "lineage.dba_request",
+      "type": "human",
+      "phase": "phase4",
+      "title": "Create DBA query pack and wait (offline lineage branch)",
+      "handler": "lineage.dba_request",
+      "max_attempts": 1
+    },
+    {
+      "id": "lineage.ingest_dba",
+      "type": "deterministic",
+      "phase": "phase4",
+      "title": "Ingest DBA export and resume lineage branch",
+      "handler": "lineage.ingest_dba",
+      "requires": ["sas.discover"],
+      "max_attempts": 3
+    },
+    {
+      "id": "quality.gate",
+      "type": "validation",
+      "phase": "phase8",
+      "title": "Quality gate: evidence traceability and unsupported-claim detection",
+      "handler": "quality.gate",
+      "max_attempts": 5
+    },
+    {
+      "id": "audit.export",
+      "type": "deterministic",
+      "phase": "phase8",
+      "title": "Export audit trail package",
+      "handler": "audit.export",
+      "requires": ["quality.gate"],
+      "max_attempts": 3
+    }
+  ],
+  "edges": [
+    {"source": "sys.workspace", "target": "intake.register", "condition": {"name": "always"}},
+    {"source": "intake.register", "target": "intake.coverage", "condition": {"name": "always"}},
+    {"source": "intake.coverage", "target": "sas.discover", "condition": {"name": "always"}},
+    {"source": "intake.coverage", "target": "runtime.correlate", "condition": {"name": "always"}},
+    {"source": "sas.discover", "target": "doc.map_apps", "condition": {"name": "always"}},
+    {"source": "sas.discover", "target": "lineage.dba_request", "condition": {"name": "always"}},
+    {"source": "lineage.dba_request", "target": "lineage.ingest_dba", "condition": {"name": "always"}},
+    {"source": "runtime.correlate", "target": "quality.gate", "condition": {"name": "always"}},
+    {"source": "doc.map_apps", "target": "quality.gate", "condition": {"name": "always"}},
+    {"source": "quality.gate", "target": "audit.export", "condition": {"name": "always"}}
+  ]
+}

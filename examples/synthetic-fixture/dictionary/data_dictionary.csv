@@ -1,0 +1,4 @@
+object_name,application,source_file
+CUSTOMER_MASTER,CRM,data_dictionary_2026.csv
+CUSTOMER_DQ,DATA_QUALITY,data_dictionary_2026.csv
+ADDRESS_EXT,CRM,data_dictionary_2026.csv
